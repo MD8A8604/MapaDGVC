@@ -376,7 +376,7 @@ const estadosMexico = [
 
 const map = new mapboxgl.Map({
     container: 'map',
-    style: 'mapbox://styles/miguelochoa/cmehi491h00qr01s46p4w8mk7',
+    style: 'mapbox://styles/miguelochoa/cmq5ozdrp001w01qrgm54dge6',
     center: [-100.910019, 25.946378],
     zoom: window.innerWidth < 768 ? 4.2 : 4.5,
     customAttribution: '© DGVC 2025'
