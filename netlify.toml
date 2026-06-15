@@ -1,0 +1,3 @@
+[build]
+  command = "test -n \"$MAPBOX_ACCESS_TOKEN\" && printf \"window.MAPBOX_ACCESS_TOKEN = '%s';\\n\" \"$MAPBOX_ACCESS_TOKEN\" > config.js"
+  publish = "."
