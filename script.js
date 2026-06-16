@@ -2894,7 +2894,7 @@ function crearLeyenda() {
     const meta = document.createElement('div');
     meta.style.cssText = 'margin-top:12px; padding-top:8px; border-top:1px solid rgba(0,0,0,0.06); font-size:10px; color:#999; text-align:right; font-family: sans-serif;';
     meta.innerHTML = `
-        Actualización: <strong>9 de marzo de 2026</strong><br>
+        Actualización: <strong>15 de junio de 2026</strong><br>
         Elaboración: <strong>DT - DGVC</strong>
     `;
     body.appendChild(meta);
