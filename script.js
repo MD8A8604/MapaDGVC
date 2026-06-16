@@ -1652,7 +1652,7 @@ map.on('load', () => {
                 layout: { visibility: 'none' },
                 paint: {
                     'fill-color': '#FF8C00',
-                    'fill-opacity': 0.25
+                    'fill-opacity': 0.06
                 }
             }, 'puntos-geojson');
 
@@ -1664,7 +1664,7 @@ map.on('load', () => {
                 paint: {
                     'line-color': '#FF8C00',
                     'line-width': 1.5,
-                    'line-opacity': 0.7
+                    'line-opacity': 0.45
                 }
             }, 'puntos-geojson');
 
