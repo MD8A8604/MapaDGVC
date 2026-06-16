@@ -39,16 +39,17 @@ const PROP_NINECES_12_17 = '12_A_17';
 const PROP_NINECES_18_29 = '18_A_29';
 let modoNinecesActual = '3_11';
 const PROP_ACCIONES = 'Acciones';
+const ICONO_PROGRAMA_DEFAULT = 'programa-default';
 
 const programasOriginales = [
-    { nombre: 'Semilleros Creativos', color: '#0d0887', cantidad: 0 },
-    { nombre: 'Semilleros de Paz', color: '#5302a3', cantidad: 0 },
-    { nombre: 'Semilleros de Música', color: '#febd2a', cantidad: 0 },
-    { nombre: 'Semilleros Creativos INPI', color: '#db5c68', cantidad: 0 },
-    { nombre: 'Convite Cultural', color: '#a34cfa', cantidad: 0 },
-    { nombre: 'Cine Sillita', color: '#a57f2c', cantidad: 0 },
-    { nombre: "PAICE 24", color: '#8b0aa5', cantidad: 0 },
-    { nombre: "PAICE 25", color: '#32CD32', cantidad: 0 }
+    { nombre: 'Semilleros Creativos', color: '#7A5AA6', categoria: 'Actividades de formación', forma: 'circle', icono: 'programa-semilleros-creativos', cantidad: 0 },
+    { nombre: 'Semilleros de Paz', color: '#A66A5B', categoria: 'Actividades de formación', forma: 'circle', icono: 'programa-semilleros-paz', cantidad: 0 },
+    { nombre: 'Semilleros de Música', color: '#3B6C8F', categoria: 'Actividades de formación', forma: 'circle', icono: 'programa-semilleros-musica', cantidad: 0 },
+    { nombre: 'Semilleros Creativos INPI', color: '#A57F2C', categoria: 'Actividades de formación', forma: 'circle', icono: 'programa-semilleros-inpi', cantidad: 0 },
+    { nombre: 'Convite Cultural', color: '#9B2247', categoria: 'Actividades artísticas y culturales', forma: 'diamond', icono: 'programa-convites', cantidad: 0 },
+    { nombre: 'Cine Sillita', color: '#B08D57', categoria: 'Actividades artísticas y culturales', forma: 'diamond', icono: 'programa-cine', cantidad: 0 },
+    { nombre: "PAICE 24", color: '#16A34A', categoria: 'Convocatorias', forma: 'square', icono: 'programa-paice-24', cantidad: 0 },
+    { nombre: "PAICE 25", color: '#16A34A', categoria: 'Convocatorias', forma: 'square', icono: 'programa-paice-25', cantidad: 0 }
 ];
 
 const COLORES_DENSIDAD = ['#FFF8F0', '#F7EEDD', '#EFE4CC', '#E5D7B8', '#D8C8A2', '#CBB98D', '#B9A57A'];
@@ -63,6 +64,81 @@ const escalaNacional = [0, 8, 21, 37, 63, 110, 251, 15509];
 // Estados cubiertos por cada capa especial
 const ESTADOS_PLAN_MICHOACAN = ['Michoacán'];
 const ESTADOS_ISTMO_CUENCA = ['Oaxaca', 'Veracruz', 'Chiapas', 'Tabasco', 'Guerrero', 'Michoacán', 'Puebla', 'Tlaxcala', 'Estado de México', 'Jalisco'];
+
+function dibujarRectRedondeado(ctx, x, y, width, height, radius) {
+    const r = Math.min(radius, width / 2, height / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + width - r, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+    ctx.lineTo(x + width, y + height - r);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+    ctx.lineTo(x + r, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+}
+
+function crearIconoPrograma(color, forma) {
+    const size = 64;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+
+    const ctx = canvas.getContext('2d');
+    const center = size / 2;
+    const strokeWidth = 8;
+
+    ctx.translate(center, center);
+    ctx.fillStyle = color;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = strokeWidth;
+    ctx.lineJoin = 'round';
+
+    if (forma === 'diamond') {
+        ctx.beginPath();
+        ctx.moveTo(0, -24);
+        ctx.lineTo(24, 0);
+        ctx.lineTo(0, 24);
+        ctx.lineTo(-24, 0);
+        ctx.closePath();
+    } else if (forma === 'square') {
+        dibujarRectRedondeado(ctx, -21, -21, 42, 42, 4);
+    } else {
+        ctx.beginPath();
+        ctx.arc(0, 0, 23, 0, Math.PI * 2);
+        ctx.closePath();
+    }
+
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    return ctx.getImageData(0, 0, size, size);
+}
+
+function registrarIconosProgramas() {
+    const iconos = [
+        ...programasOriginales.map(p => ({ id: p.icono, color: p.color, forma: p.forma })),
+        { id: ICONO_PROGRAMA_DEFAULT, color: '#999999', forma: 'circle' }
+    ];
+
+    iconos.forEach(icono => {
+        if (!map.hasImage(icono.id)) {
+            map.addImage(icono.id, crearIconoPrograma(icono.color, icono.forma), { pixelRatio: 2 });
+        }
+    });
+}
+
+function crearExpresionIconoPrograma() {
+    const expression = ['match', ['get', 'Programa']];
+    programasOriginales.forEach(programa => {
+        expression.push(programa.nombre, programa.icono);
+    });
+    expression.push(ICONO_PROGRAMA_DEFAULT);
+    return expression;
+}
 
 // --- ESTADO ---
 let filtroEstadoActual = 'Todos los estados';
@@ -1212,34 +1288,28 @@ map.on('load', () => {
     // (source and layers are created dynamically when PLAN_MICHOACAN_URL is fetched below)
 
     map.addSource('programas-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    registrarIconosProgramas();
     map.addLayer({
         id: 'puntos-geojson',
-        type: 'circle',
+        type: 'symbol',
         source: 'programas-source',
-        paint: {
-            'circle-color': [
-                'match', ['get', 'Programa'],
-                'Semilleros Creativos', '#0d0887',
-                'Semilleros de Paz', '#5302a3',
-                'Semilleros de Música', '#febd2a',
-                'Semilleros Creativos INPI', '#db5c68',
-                'Convite Cultural', '#a34cfa',
-                'Cine Sillita', '#a57f2c',
-                "PAICE 24", '#8b0aa5',
-                "PAICE 25", '#32CD32',
-                '#cccccc'
-            ],
-            'circle-radius': [
+        layout: {
+            'icon-image': crearExpresionIconoPrograma(),
+            'icon-size': [
                 'interpolate',
                 ['linear'],
                 ['zoom'],
-                4, 4,
-                8, 6,
-                12, 7,
-                16, 9
+                4, 0.28,
+                8, 0.38,
+                12, 0.45,
+                16, 0.58
             ],
-            'circle-stroke-width': 1,
-            'circle-stroke-color': '#fff'
+            'icon-anchor': 'center',
+            'icon-allow-overlap': true,
+            'icon-ignore-placement': true
+        },
+        paint: {
+            'icon-opacity': 0.96
         }
     });
 
@@ -2194,23 +2264,24 @@ function actualizarEstilosVisuales() {
         const key = item.querySelector('.legend-key, .mobile-legend-key');
         const activo = filtrosProgramasActivos.length === 0 || filtrosProgramasActivos.includes(n);
 
-        const color = programasOriginales.find(p => p.nombre === n)?.color || '#999';
+        const programa = programasOriginales.find(p => p.nombre === n);
+        const color = programa?.color || '#999';
 
         if (activo) {
             item.style.opacity = '1';
             item.style.fontWeight = 'bold';
             if (key) {
-                key.style.background = color;
-                key.style.color = 'white';
+                key.style.backgroundColor = color;
                 key.style.borderColor = color;
+                key.style.opacity = '1';
             }
         } else {
             item.style.opacity = '0.7';
             item.style.fontWeight = 'normal';
             if (key) {
-                key.style.background = 'transparent';
-                key.style.color = 'transparent';
+                key.style.backgroundColor = 'transparent';
                 key.style.borderColor = color;
+                key.style.opacity = '0.9';
             }
         }
     });
@@ -2572,10 +2643,12 @@ function crearLeyenda() {
         d.onclick = () => manejarFiltroPrograma(p.nombre);
 
         d.innerHTML = `
-            <span class="legend-key" id="legend-key-${i}" style="
-                background:${p.color}; 
-                border-color: ${p.color};
-            ">✓</span>
+            <span
+                class="legend-key legend-shape-${p.forma}"
+                id="legend-key-${i}"
+                title="${p.categoria}"
+                style="background-color:${p.color}; border-color:${p.color};"
+            ></span>
             <span class="program-name" style="color:${p.color}">${p.nombre}</span>&nbsp;
             <span class="program-count">(0)</span>
         `;
