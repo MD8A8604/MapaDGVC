@@ -42,15 +42,28 @@ const PROP_ACCIONES = 'Acciones';
 const ICONO_PROGRAMA_DEFAULT = 'programa-default';
 
 const programasOriginales = [
-    { nombre: 'Semilleros Creativos', color: '#7A5AA6', categoria: 'Actividades de formación', forma: 'circle', icono: 'programa-semilleros-creativos', cantidad: 0 },
-    { nombre: 'Semilleros de Paz', color: '#A66A5B', categoria: 'Actividades de formación', forma: 'circle', icono: 'programa-semilleros-paz', cantidad: 0 },
-    { nombre: 'Semilleros de Música', color: '#3B6C8F', categoria: 'Actividades de formación', forma: 'circle', icono: 'programa-semilleros-musica', cantidad: 0 },
-    { nombre: 'Semilleros Creativos INPI', color: '#A57F2C', categoria: 'Actividades de formación', forma: 'circle', icono: 'programa-semilleros-inpi', cantidad: 0 },
+    { nombre: 'Semilleros Creativos', etiquetaLeyenda: 'DGVC', color: '#7A5AA6', categoria: 'Actividades de formación', forma: 'circle', icono: 'programa-semilleros-creativos', cantidad: 0 },
+    { nombre: 'Semilleros de Paz', etiquetaLeyenda: 'Paz', color: '#A66A5B', categoria: 'Actividades de formación', forma: 'circle', icono: 'programa-semilleros-paz', cantidad: 0 },
+    { nombre: 'Semilleros de Música', etiquetaLeyenda: 'Música', color: '#3B6C8F', categoria: 'Actividades de formación', forma: 'circle', icono: 'programa-semilleros-musica', cantidad: 0 },
+    { nombre: 'Semilleros Creativos INPI', etiquetaLeyenda: 'INPI', color: '#A57F2C', categoria: 'Actividades de formación', forma: 'circle', icono: 'programa-semilleros-inpi', cantidad: 0 },
     { nombre: 'Convite Cultural', color: '#9B2247', categoria: 'Actividades artísticas y culturales', forma: 'diamond', icono: 'programa-convites', cantidad: 0 },
     { nombre: 'Cine Sillita', color: '#B08D57', categoria: 'Actividades artísticas y culturales', forma: 'diamond', icono: 'programa-cine', cantidad: 0 },
     { nombre: "PAICE 24", color: '#16A34A', categoria: 'Convocatorias', forma: 'square', icono: 'programa-paice-24', cantidad: 0 },
     { nombre: "PAICE 25", color: '#16A34A', categoria: 'Convocatorias', forma: 'square', icono: 'programa-paice-25', cantidad: 0 }
 ];
+
+const GRUPO_SEMILLEROS = {
+    id: 'semilleros-creativos',
+    nombre: 'Semilleros Creativos',
+    color: '#7A5AA6',
+    forma: 'circle',
+    categoria: 'Actividades de formación',
+    programas: ['Semilleros Creativos', 'Semilleros de Música', 'Semilleros de Paz', 'Semilleros Creativos INPI']
+};
+
+let gruposLeyendaExpandidos = {
+    [GRUPO_SEMILLEROS.id]: false
+};
 
 const COLORES_DENSIDAD = ['#FFF8F0', '#F7EEDD', '#EFE4CC', '#E5D7B8', '#D8C8A2', '#CBB98D', '#B9A57A'];
 const COLORES_INDIGENA = ['#F0FDF4', '#CEF4DB', '#ABEAC2', '#84C99D', '#5FB77F', '#3BA662', '#179445'];
@@ -138,6 +151,49 @@ function crearExpresionIconoPrograma() {
     });
     expression.push(ICONO_PROGRAMA_DEFAULT);
     return expression;
+}
+
+function obtenerPrograma(nombre) {
+    return programasOriginales.find(programa => programa.nombre === nombre);
+}
+
+function crearMarkupClaveLeyenda({ forma, color, categoria, id = '' }) {
+    const idAttr = id ? ` id="${id}"` : '';
+    return `
+        <span
+            class="legend-key legend-shape-${forma}"
+            ${idAttr}
+            title="${categoria}"
+            style="background-color:${color}; border-color:${color};"
+        ></span>
+    `;
+}
+
+function actualizarVisibilidadGrupoLeyenda(groupId) {
+    const expanded = !!gruposLeyendaExpandidos[groupId];
+    const subitems = document.getElementById(`legend-subitems-${groupId}`);
+    const toggle = document.querySelector(`.legend-group-toggle[data-group-id="${groupId}"]`);
+
+    if (subitems) subitems.style.display = expanded ? 'block' : 'none';
+    if (toggle) {
+        toggle.textContent = expanded ? '−' : '+';
+        toggle.setAttribute('aria-expanded', String(expanded));
+        toggle.title = expanded ? 'Ocultar desglose' : 'Mostrar desglose';
+    }
+}
+
+function actualizarTextoConteoPrograma(nombrePrograma, textoConteo) {
+    document.querySelectorAll('.legend-item[data-program]').forEach(item => {
+        if (item.dataset.program !== nombrePrograma) return;
+        const count = item.querySelector('.program-count');
+        if (count) count.textContent = textoConteo;
+    });
+}
+
+function actualizarTextoConteoGrupo(groupId, textoConteo) {
+    document.querySelectorAll(`.legend-group-item[data-group-id="${groupId}"] .program-count`).forEach(count => {
+        count.textContent = textoConteo;
+    });
 }
 
 // --- ESTADO ---
@@ -2258,34 +2314,42 @@ function aplicarFiltros() {
     actualizarEstilosVisuales();
 }
 
+function aplicarEstiloItemLeyenda(item, { activo, parcial = false, color }) {
+    const key = item.querySelector('.legend-key, .mobile-legend-key');
+    item.style.opacity = activo || parcial ? '1' : '0.7';
+    item.style.fontWeight = activo || parcial ? 'bold' : 'normal';
+
+    if (!key) return;
+
+    key.style.borderColor = color;
+    key.style.opacity = activo || parcial ? '1' : '0.9';
+    key.style.backgroundColor = activo ? color : 'transparent';
+
+    if (parcial) {
+        key.style.backgroundColor = color;
+        key.style.opacity = '0.55';
+    }
+}
+
 function actualizarEstilosVisuales() {
-    document.querySelectorAll('.legend-item, .mobile-legend-item').forEach(item => {
+    document.querySelectorAll('.legend-item[data-program], .mobile-legend-item[data-program]').forEach(item => {
         const n = item.querySelector('.program-name')?.textContent.trim();
-        const key = item.querySelector('.legend-key, .mobile-legend-key');
-        const activo = filtrosProgramasActivos.length === 0 || filtrosProgramasActivos.includes(n);
-
-        const programa = programasOriginales.find(p => p.nombre === n);
+        const programaNombre = item.dataset.program || n;
+        const activo = filtrosProgramasActivos.length === 0 || filtrosProgramasActivos.includes(programaNombre);
+        const programa = obtenerPrograma(programaNombre);
         const color = programa?.color || '#999';
+        aplicarEstiloItemLeyenda(item, { activo, color });
+    });
 
-        if (activo) {
-            item.style.opacity = '1';
-            item.style.fontWeight = 'bold';
-            if (key) {
-                key.style.backgroundColor = color;
-                key.style.borderColor = color;
-                key.style.opacity = '1';
-            }
-        } else {
-            item.style.opacity = '0.7';
-            item.style.fontWeight = 'normal';
-            if (key) {
-                key.style.backgroundColor = 'transparent';
-                key.style.borderColor = color;
-                key.style.opacity = '0.9';
-            }
-        }
+    document.querySelectorAll(`.legend-group-item[data-group-id="${GRUPO_SEMILLEROS.id}"]`).forEach(item => {
+        const programasGrupo = GRUPO_SEMILLEROS.programas;
+        const activosGrupo = programasGrupo.filter(p => filtrosProgramasActivos.includes(p)).length;
+        const activo = filtrosProgramasActivos.length === 0 || activosGrupo === programasGrupo.length;
+        const parcial = filtrosProgramasActivos.length > 0 && activosGrupo > 0 && activosGrupo < programasGrupo.length;
+        aplicarEstiloItemLeyenda(item, { activo, parcial, color: GRUPO_SEMILLEROS.color });
     });
 }
+
 
 function actualizarContadores() {
     let d = datosOriginales;
@@ -2316,13 +2380,13 @@ function actualizarContadores() {
         if (c[f.properties.Programa] !== undefined) c[f.properties.Programa]++;
     });
 
-    programasOriginales.forEach((p, i) => {
+    programasOriginales.forEach(p => {
         const t = `(${c[p.nombre] || 0})`;
-        const l = document.querySelectorAll('#legend .legend-item .program-count')[i];
-        const m = document.querySelectorAll('.mobile-legend-item .program-count')[i];
-        if (l) l.textContent = t;
-        if (m) m.textContent = t;
+        actualizarTextoConteoPrograma(p.nombre, t);
     });
+
+    const totalSemilleros = GRUPO_SEMILLEROS.programas.reduce((total, programa) => total + (c[programa] || 0), 0);
+    actualizarTextoConteoGrupo(GRUPO_SEMILLEROS.id, `(${totalSemilleros})`);
 }
 
 function manejarFiltroPrograma(p) {
@@ -2333,6 +2397,33 @@ function manejarFiltroPrograma(p) {
         filtrosProgramasActivos.splice(index, 1);
     }
     aplicarFiltros();
+}
+
+function manejarFiltroGrupoProgramas(programas) {
+    const todosActivos = programas.every(p => filtrosProgramasActivos.includes(p));
+
+    if (filtrosProgramasActivos.length === 0) {
+        filtrosProgramasActivos = [...programas];
+    } else if (todosActivos && filtrosProgramasActivos.length === programas.length) {
+        filtrosProgramasActivos = [];
+    } else if (todosActivos) {
+        filtrosProgramasActivos = filtrosProgramasActivos.filter(p => !programas.includes(p));
+    } else {
+        programas.forEach(p => {
+            if (!filtrosProgramasActivos.includes(p)) filtrosProgramasActivos.push(p);
+        });
+    }
+
+    aplicarFiltros();
+}
+
+window.toggleGrupoLeyenda = function (groupId) {
+    gruposLeyendaExpandidos[groupId] = !gruposLeyendaExpandidos[groupId];
+    actualizarVisibilidadGrupoLeyenda(groupId);
+}
+
+window.manejarFiltroGrupoSemilleros = function () {
+    manejarFiltroGrupoProgramas(GRUPO_SEMILLEROS.programas);
 }
 
 window.manejarSwitchTerritoriosPaz = function (v) {
@@ -2511,6 +2602,8 @@ function toggleLegend(visible) {
 
 window.resetearFiltros = function () {
     filtrosProgramasActivos = [];
+    gruposLeyendaExpandidos[GRUPO_SEMILLEROS.id] = false;
+    actualizarVisibilidadGrupoLeyenda(GRUPO_SEMILLEROS.id);
     territoriosPazVisible = false;
     filtroEstatus = 'Activo';
     filtroEstadoActual = 'Todos los estados';
@@ -2633,27 +2726,68 @@ function crearLeyenda() {
             <button class="estatus-btn" data-estatus="Por activar" onclick="manejarCambioEstatus('Por activar')">Por activar</button>
             <button class="estatus-btn" data-estatus="Todos" onclick="manejarCambioEstatus('Todos')">Todos</button>
         </div>
-        <div style="margin-bottom:8px;font-weight:normal;font-size:11px;color:#777;">Selecciona las casillas para filtrar:</div>
+        <div style="margin-bottom:8px;font-weight:normal;font-size:11px;color:#777;">Selecciona estrategias para filtrar:</div>
     `);
 
-    programasOriginales.forEach((p, i) => {
+    const crearItemPrograma = (p, extraClass = '') => {
         const d = document.createElement('div');
-        d.className = 'legend-item';
+        d.className = `legend-item ${extraClass}`.trim();
+        d.dataset.program = p.nombre;
         d.style.cursor = 'pointer';
         d.onclick = () => manejarFiltroPrograma(p.nombre);
 
         d.innerHTML = `
-            <span
-                class="legend-key legend-shape-${p.forma}"
-                id="legend-key-${i}"
-                title="${p.categoria}"
-                style="background-color:${p.color}; border-color:${p.color};"
-            ></span>
-            <span class="program-name" style="color:${p.color}">${p.nombre}</span>&nbsp;
+            ${crearMarkupClaveLeyenda({
+                forma: p.forma,
+                color: p.color,
+                categoria: p.categoria
+            })}
+            <span class="program-name" style="color:${p.color}">${p.etiquetaLeyenda || p.nombre}</span>&nbsp;
             <span class="program-count">(0)</span>
         `;
-        body.appendChild(d);
+        return d;
+    };
+
+    const grupoSemilleros = document.createElement('div');
+    grupoSemilleros.className = 'legend-item legend-group-item';
+    grupoSemilleros.dataset.groupId = GRUPO_SEMILLEROS.id;
+    grupoSemilleros.style.cursor = 'pointer';
+    grupoSemilleros.onclick = () => manejarFiltroGrupoSemilleros();
+    grupoSemilleros.innerHTML = `
+        <button
+            type="button"
+            class="legend-group-toggle"
+            data-group-id="${GRUPO_SEMILLEROS.id}"
+            aria-label="Mostrar desglose de Semilleros Creativos"
+            aria-expanded="false"
+            onclick="event.stopPropagation(); toggleGrupoLeyenda('${GRUPO_SEMILLEROS.id}');"
+        >+</button>
+        ${crearMarkupClaveLeyenda({
+            forma: GRUPO_SEMILLEROS.forma,
+            color: GRUPO_SEMILLEROS.color,
+            categoria: GRUPO_SEMILLEROS.categoria
+        })}
+        <span class="program-name">${GRUPO_SEMILLEROS.nombre}</span>&nbsp;
+        <span class="program-count">(0)</span>
+    `;
+    body.appendChild(grupoSemilleros);
+
+    const subitemsSemilleros = document.createElement('div');
+    subitemsSemilleros.id = `legend-subitems-${GRUPO_SEMILLEROS.id}`;
+    subitemsSemilleros.className = 'legend-subitems';
+    GRUPO_SEMILLEROS.programas.forEach(nombrePrograma => {
+        const programa = obtenerPrograma(nombrePrograma);
+        if (programa) subitemsSemilleros.appendChild(crearItemPrograma(programa, 'legend-subitem'));
     });
+    body.appendChild(subitemsSemilleros);
+    actualizarVisibilidadGrupoLeyenda(GRUPO_SEMILLEROS.id);
+
+    programasOriginales
+        .filter(p => !GRUPO_SEMILLEROS.programas.includes(p.nombre))
+        .forEach(p => {
+            const d = crearItemPrograma(p);
+            body.appendChild(d);
+        });
 
     const addSw = (id, txt, fn) => {
         const d = document.createElement('div');
