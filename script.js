@@ -1299,10 +1299,10 @@ map.on('load', () => {
                 'interpolate',
                 ['linear'],
                 ['zoom'],
-                4, 0.28,
-                8, 0.38,
-                12, 0.45,
-                16, 0.58
+                4, 0.40,
+                8, 0.52,
+                12, 0.62,
+                16, 0.76
             ],
             'icon-anchor': 'center',
             'icon-allow-overlap': true,
