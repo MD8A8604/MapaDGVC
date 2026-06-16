@@ -1,25 +1,18 @@
-/* ===== SOLUCIÓN 1: OCULTAR LEYENDA DE MAPBOX EN ZOOM ALEJADO ===== */
-/* Ocultar completamente la leyenda nativa de Mapbox */
+/* ===== ATRIBUCIONES MAPBOX COMPACTAS ===== */
 .mapboxgl-ctrl-attrib {
-    display: none !important;
+    display: block !important;
+    background: rgba(255, 255, 255, 0.78) !important;
+    border-radius: 6px !important;
+    margin: 0 6px 6px 0 !important;
+    padding: 2px 5px !important;
+    font-family: 'Noto Sans', sans-serif !important;
+    font-size: 10px !important;
 }
 
-.mapboxgl-ctrl-logo {
-    display: none !important;
+.mapboxgl-ctrl-attrib a {
+    color: #555 !important;
 }
 
-/* Si hay otros elementos de leyenda de Mapbox, también los ocultamos */
-.mapboxgl-ctrl-bottom-left,
-.mapboxgl-ctrl-bottom-right {
-    pointer-events: none !important;
-}
-
-.mapboxgl-ctrl-bottom-left>*,
-.mapboxgl-ctrl-bottom-right>* {
-    display: none !important;
-}
-
-/* Solo mantener visible el logo mínimo requerido por Mapbox en esquina inferior izquierda */
 .mapboxgl-ctrl-logo {
     display: block !important;
     width: 21px !important;

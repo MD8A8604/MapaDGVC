@@ -157,6 +157,23 @@ function obtenerPrograma(nombre) {
     return programasOriginales.find(programa => programa.nombre === nombre);
 }
 
+function normalizarTexto(valor) {
+    if (valor === null || valor === undefined) return '';
+    const texto = String(valor).trim();
+    if (!texto || texto.toLowerCase() === 'null' || texto.toLowerCase() === 'undefined') return '';
+    return texto;
+}
+
+function escapeHTML(valor) {
+    return normalizarTexto(valor).replace(/[&<>"']/g, caracter => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    })[caracter]);
+}
+
 function crearMarkupClaveLeyenda({ forma, color, categoria, id = '' }) {
     const idAttr = id ? ` id="${id}"` : '';
     return `
@@ -511,7 +528,7 @@ const map = new mapboxgl.Map({
     style: 'mapbox://styles/miguelochoa/cmq5ozdrp001w01qrgm54dge6',
     center: [-100.910019, 25.946378],
     zoom: window.innerWidth < 768 ? 4.2 : 4.5,
-    customAttribution: '© DGVC 2025'
+    customAttribution: '© DGVC 2026'
 });
 
 map.addControl(new mapboxgl.NavigationControl(), 'top-right');
@@ -731,7 +748,8 @@ function mostrarPopupRuta(data, profile) {
         if (data.legs && data.legs[0].steps) {
             pasosHTML = '<div id="ruta-pasos" style="display:none; text-align:left; margin-top:10px; max-height:150px; overflow-y:auto; font-size:12px; border-top:1px solid #ddd; padding-top:5px;">';
             data.legs[0].steps.forEach((step, index) => {
-                pasosHTML += `<div style="margin-bottom:4px;">${index + 1}. ${step.maneuver.instruction}</div>`;
+                const instruccion = escapeHTML(step.maneuver?.instruction || 'Sin indicación');
+                pasosHTML += `<div style="margin-bottom:4px;">${index + 1}. ${instruccion}</div>`;
             });
             pasosHTML += '</div>';
         }
@@ -1413,18 +1431,19 @@ map.on('load', () => {
 
         // 1. Definimos qué campo usar como "Nombre" principal. 
         // Usamos 'Nombre del semillero' como prioridad, si no existe, usamos 'Programa'.
-        const nombreTitulo = p['Nombre'] || p.Programa || 'Sin nombre';
+        const nombreTitulo = escapeHTML(p['Nombre'] || p.Programa || 'Sin nombre');
 
         // 2. Función para generar las filas con el estilo solicitado:
         // Etiqueta en gris claro (#888) y Valor en negro (#000).
         const generarFila = (etiqueta, valor) => {
             // Si el valor está vacío, null o undefined, no mostramos la línea
-            if (!valor || valor === 'null' || valor === 'undefined') return '';
+            const valorSeguro = escapeHTML(valor);
+            if (!valorSeguro) return '';
 
             return `
                 <div style="margin-bottom: 4px; line-height: 1.4;">
-                    <span style="color: #999; font-weight: 400;">${etiqueta}:</span> 
-                    <span style="color: #000; font-weight: 500;">${valor}</span>
+                    <span style="color: #999; font-weight: 400;">${escapeHTML(etiqueta)}:</span>
+                    <span style="color: #000; font-weight: 500;">${valorSeguro}</span>
                 </div>
             `;
         };
@@ -1473,8 +1492,8 @@ map.on('load', () => {
             .setLngLat(e.lngLat)
             .setHTML(`
                 <div>
-                    <div><strong>Municipio:</strong> ${nombreMunicipio}</div>
-                    <div><strong>Total de espacios:</strong> ${totalEspacios}</div>
+                    <div><strong>Municipio:</strong> ${escapeHTML(nombreMunicipio)}</div>
+                    <div><strong>Total de espacios:</strong> ${escapeHTML(totalEspacios)}</div>
                 </div>
             `)
             .addTo(map);
@@ -1501,8 +1520,8 @@ map.on('load', () => {
             .setLngLat(e.lngLat)
             .setHTML(`
                 <div>
-                    <div><strong>Municipio:</strong> ${nombreMunicipio}</div>
-                    <div><strong>${etiquetaDelitos}:</strong> ${totalDelitos}</div>
+                    <div><strong>Municipio:</strong> ${escapeHTML(nombreMunicipio)}</div>
+                    <div><strong>${escapeHTML(etiquetaDelitos)}:</strong> ${escapeHTML(totalDelitos)}</div>
                 </div>
             `)
             .addTo(map);
@@ -1522,13 +1541,14 @@ map.on('load', () => {
         const propiedades = e.features[0].properties || {};
         const nombreMunicipio = obtenerNombreMunicipio(propiedades);
         const nombreEstado = propiedades['NOM_ENT'] || propiedades['Entidad'] || '';
+        const nombreEstadoSeguro = escapeHTML(nombreEstado);
 
         popupTerritoriosPazHover
             .setLngLat(e.lngLat)
             .setHTML(`
                 <div>
-                    <div><strong>Municipio:</strong> ${nombreMunicipio}</div>
-                    ${nombreEstado ? `<div><strong>Estado:</strong> ${nombreEstado}</div>` : ''}
+                    <div><strong>Municipio:</strong> ${escapeHTML(nombreMunicipio)}</div>
+                    ${nombreEstadoSeguro ? `<div><strong>Estado:</strong> ${nombreEstadoSeguro}</div>` : ''}
                 </div>
             `)
             .addTo(map);
@@ -1549,7 +1569,7 @@ map.on('load', () => {
             .setLngLat(e.lngLat)
             .setHTML(`
                 <div style="font-family:'Noto Sans',sans-serif; font-size:13px;">
-                    <strong style="color:#FF6A00;">Región:</strong> ${region}
+                    <strong style="color:#FF6A00;">Región:</strong> ${escapeHTML(region)}
                 </div>
             `)
             .addTo(map);
@@ -2110,6 +2130,24 @@ function actualizarLeyendaDemografica(valores, tipo, customColors = null) {
 
 // --- FILTROS Y CONTROLES ---
 
+function crearOpcionDropdownMunicipio(municipio) {
+    const item = document.createElement('div');
+    item.className = 'custom-dropdown-item';
+    item.textContent = municipio;
+    item.addEventListener('click', () => window.manejarCambioMunicipio(municipio));
+    return item;
+}
+
+function poblarDropdownMunicipios(lista, etiqueta, wrapper, municipios, isAll) {
+    lista.textContent = '';
+    lista.appendChild(crearOpcionDropdownMunicipio('Todos los municipios'));
+    municipios.forEach(municipio => {
+        lista.appendChild(crearOpcionDropdownMunicipio(municipio));
+    });
+    etiqueta.textContent = 'Todos los municipios';
+    wrapper.style.display = isAll ? 'none' : '';
+}
+
 // Populates the municipality selects based on CSV data for the given state
 function actualizarSelectorMunicipio(estado) {
     const isAll = (estado === 'Todos los estados');
@@ -2117,10 +2155,10 @@ function actualizarSelectorMunicipio(estado) {
     if (!isAll && datosOriginales.length > 0) {
         const set = new Set();
         datosOriginales.forEach(f => {
-            const mun = f.properties.Municipio;
+            const mun = normalizarTexto(f.properties.Municipio);
             const est = f.properties.Estado;
-            if (est === estado && mun && mun !== 'null' && mun !== 'undefined') {
-                set.add(mun.trim());
+            if (est === estado && mun) {
+                set.add(mun);
             }
         });
         municipios = [...set].sort((a, b) => a.localeCompare(b, 'es'));
@@ -2131,23 +2169,14 @@ function actualizarSelectorMunicipio(estado) {
     const wrapper = document.getElementById('municipio-selector-wrapper');
 
     if (mListDesktop && mLabelDesktop && wrapper) {
-        const defaultOpt = `<div class="custom-dropdown-item" onclick="manejarCambioMunicipio('Todos los municipios')">Todos los municipios</div>`;
-        const opts = municipios.map(m => `<div class="custom-dropdown-item" onclick="manejarCambioMunicipio('${m}')">${m}</div>`).join('');
-        mListDesktop.innerHTML = defaultOpt + opts;
-        mLabelDesktop.textContent = 'Todos los municipios';
-        wrapper.style.display = isAll ? 'none' : '';
+        poblarDropdownMunicipios(mListDesktop, mLabelDesktop, wrapper, municipios, isAll);
     }
 
-    // Si también lo necesitas en mobile, se haría homólogo para mobileSel...
     const mListMobile = document.getElementById('mobile-municipio-dropdown-list');
     const mLabelMobile = document.getElementById('mobile-municipio-select-label');
     const mobileWrapper = document.getElementById('mobile-municipio-selector-wrapper');
     if (mListMobile && mLabelMobile && mobileWrapper) {
-        const defaultOpt = `<div class="custom-dropdown-item" onclick="manejarCambioMunicipio('Todos los municipios')">Todos los municipios</div>`;
-        const opts = municipios.map(m => `<div class="custom-dropdown-item" onclick="manejarCambioMunicipio('${m}')">${m}</div>`).join('');
-        mListMobile.innerHTML = defaultOpt + opts;
-        mLabelMobile.textContent = 'Todos los municipios';
-        mobileWrapper.style.display = isAll ? 'none' : '';
+        poblarDropdownMunicipios(mListMobile, mLabelMobile, mobileWrapper, municipios, isAll);
     }
 }
 
