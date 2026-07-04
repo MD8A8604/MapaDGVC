@@ -48,8 +48,7 @@ const programasOriginales = [
     { nombre: 'Semilleros Creativos INPI', etiquetaLeyenda: 'INPI', color: '#A57F2C', categoria: 'Actividades de formación', forma: 'circle', icono: 'programa-semilleros-inpi', cantidad: 0 },
     { nombre: 'Convite Cultural', color: '#9B2247', categoria: 'Actividades artísticas y culturales', forma: 'diamond', icono: 'programa-convites', cantidad: 0 },
     { nombre: 'Cine Sillita', color: '#B08D57', categoria: 'Actividades artísticas y culturales', forma: 'diamond', icono: 'programa-cine', cantidad: 0 },
-    { nombre: "PAICE 24", color: '#16A34A', categoria: 'Convocatorias', forma: 'square', icono: 'programa-paice-24', cantidad: 0 },
-    { nombre: "PAICE 25", color: '#16A34A', categoria: 'Convocatorias', forma: 'square', icono: 'programa-paice-25', cantidad: 0 }
+    { nombre: 'PAICE', color: '#16A34A', categoria: 'Convocatorias', forma: 'square', icono: 'programa-paice', cantidad: 0 }
 ];
 
 const GRUPO_SEMILLEROS = {
