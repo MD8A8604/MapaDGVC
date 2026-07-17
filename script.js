@@ -15,6 +15,7 @@ const NINECES_URL = 'https://raw.githubusercontent.com/MD8A8604/NNYJ/main/Concen
 const PLAN_MICHOACAN_URL = 'https://raw.githubusercontent.com/MD8A8604/Michoacan/refs/heads/main/PlanMichoacan.geojson';
 const PLANES_URL = 'https://raw.githubusercontent.com/MD8A8604/Cuenca_Istmo/main/Istmo_cuenca.geojson';
 const TERRITORIOS_PAZ_URL = 'https://raw.githubusercontent.com/MD8A8604/TP/main/Territorios%20de%20paz.geojson';
+const GEOJSON_FETCH_TIMEOUT_MS = 120000;
 
 const ID_CAPA_DENSIDAD = 'capa-densidad-limpia';
 const ID_CAPA_PLANES = 'capa-planes';
@@ -240,6 +241,14 @@ let popupDelitosHover = null;
 let popupEspaciosHover = null;
 let popupTerritoriosPazHover = null;
 let popupPlanMichoacanHover = null;
+
+const estadoCargaCapas = {
+    densidad: { estado: 'idle', promesa: null, error: null },
+    indigena: { estado: 'idle', promesa: null, error: null },
+    espacios: { estado: 'idle', promesa: null, error: null },
+    delitos: { estado: 'idle', promesa: null, error: null },
+    nineces: { estado: 'idle', promesa: null, error: null }
+};
 
 function parseValorNumerico(rawVal, fallback = 0) {
     const val = typeof rawVal === 'string' ? parseFloat(rawVal.replace(/,/g, '')) : Number(rawVal);
@@ -1165,6 +1174,213 @@ function corregirGeometria(geometry) {
     return geometry;
 }
 
+function obtenerPrimeraCoordenada(coordinates) {
+    let actual = coordinates;
+    while (Array.isArray(actual) && Array.isArray(actual[0])) actual = actual[0];
+    return Array.isArray(actual) && actual.length >= 2 ? actual : null;
+}
+
+function validarFeatureCollection(data, etiqueta) {
+    if (!data || data.type !== 'FeatureCollection' || !Array.isArray(data.features)) {
+        throw new Error(`${etiqueta} no devolvió un FeatureCollection válido.`);
+    }
+    return data;
+}
+
+async function fetchGeoJSON(url, etiqueta, timeoutMs = GEOJSON_FETCH_TIMEOUT_MS) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+        const response = await fetch(url, { signal: controller.signal });
+        if (!response.ok) {
+            throw new Error(`${etiqueta}: error HTTP ${response.status}.`);
+        }
+
+        const data = await response.json();
+        return validarFeatureCollection(data, etiqueta);
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            throw new Error(`${etiqueta}: la descarga excedió ${Math.round(timeoutMs / 1000)} segundos.`);
+        }
+        throw error;
+    } finally {
+        clearTimeout(timeoutId);
+    }
+}
+
+function prepararCapaMunicipal(data, etiqueta, transformarPropiedades) {
+    validarFeatureCollection(data, etiqueta);
+
+    const features = data.features.map(feature => {
+        if (!feature || typeof feature !== 'object') return feature;
+
+        feature.properties = feature.properties || {};
+        const primeraCoordenada = obtenerPrimeraCoordenada(feature.geometry?.coordinates);
+        if (primeraCoordenada && Math.abs(primeraCoordenada[0]) > 180) {
+            feature.geometry = corregirGeometria(feature.geometry);
+        }
+
+        transformarPropiedades(feature.properties);
+        return feature;
+    });
+
+    return { type: 'FeatureCollection', features };
+}
+
+function obtenerConfiguracionCapa(tipo) {
+    const configuraciones = {
+        densidad: {
+            etiqueta: 'Densidad poblacional',
+            url: DENSIDAD_URL,
+            sourceId: 'fuente-densidad-limpia',
+            preparar: data => prepararCapaMunicipal(data, 'Densidad poblacional', properties => {
+                properties[PROP_DENSIDAD] = parseValorNumerico(properties[PROP_DENSIDAD], 0);
+                properties[PROP_ENTIDAD] = normalizarTexto(properties[PROP_ENTIDAD]);
+            }),
+            asignar: data => { datosDensidadLimpios = data; },
+            esVisible: () => densidadVisible,
+            desactivar: () => { densidadVisible = false; },
+            aplicar: () => aplicarEscalaDensidad(filtroEstadoActual)
+        },
+        indigena: {
+            etiqueta: 'Población indígena',
+            url: POBINDIGENA_URL,
+            sourceId: 'fuente-poblacion-indigena',
+            preparar: data => prepararCapaMunicipal(data, 'Población indígena', properties => {
+                properties[PROP_INDIGENA] = parseValorNumerico(properties[PROP_INDIGENA], 0);
+                properties[PROP_ENTIDAD] = normalizarTexto(properties[PROP_ENTIDAD]);
+            }),
+            asignar: data => { datosIndigenaLimpios = data; },
+            esVisible: () => indigenaVisible,
+            desactivar: () => { indigenaVisible = false; },
+            aplicar: () => aplicarEscalaIndigena(filtroEstadoActual)
+        },
+        espacios: {
+            etiqueta: 'Espacios culturales',
+            url: ESPACIOS_URL,
+            sourceId: 'fuente-espacios-culturales',
+            preparar: data => prepararCapaMunicipal(data, 'Espacios culturales', properties => {
+                properties[PROP_ESPACIOS] = parseValorNumerico(properties[PROP_ESPACIOS], 0);
+                properties[PROP_ENTIDAD] = normalizarTexto(properties[PROP_ENTIDAD]);
+            }),
+            asignar: data => { datosEspaciosLimpios = data; },
+            esVisible: () => espaciosVisible,
+            desactivar: () => { espaciosVisible = false; },
+            aplicar: () => aplicarEscalaEspacios(filtroEstadoActual)
+        },
+        delitos: {
+            etiqueta: 'Incidencia delictiva',
+            url: DELITOS_URL,
+            sourceId: 'fuente-incidencia-delictiva',
+            preparar: data => prepararCapaMunicipal(data, 'Incidencia delictiva', properties => {
+                const rawAcumulado = properties[PROP_DELITOS_ACUMULADO] ?? properties[PROP_DELITOS_LEGACY];
+                properties[PROP_DELITOS_ACUMULADO] = parseValorNumerico(rawAcumulado, 0);
+                properties[PROP_DELITOS_TASA] = parseValorNumerico(properties[PROP_DELITOS_TASA], 0);
+                properties[PROP_DELITOS_LEGACY] = properties[PROP_DELITOS_ACUMULADO];
+                properties[PROP_ENTIDAD] = normalizarTexto(properties[PROP_ENTIDAD]);
+            }),
+            asignar: data => { datosDelitosLimpios = data; },
+            esVisible: () => delitosVisible,
+            desactivar: () => { delitosVisible = false; },
+            aplicar: () => aplicarEscalaDelitos(filtroEstadoActual)
+        },
+        nineces: {
+            etiqueta: 'Concentración de niñeces y jóvenes',
+            url: NINECES_URL,
+            sourceId: 'fuente-concentracion-nineces',
+            preparar: data => prepararCapaMunicipal(data, 'Concentración de niñeces y jóvenes', properties => {
+                properties[PROP_NINECES_3_11] = parseValorNumerico(properties[PROP_NINECES_3_11], 0) * 100;
+                // Mantener compatibilidad con el nombre alternativo presente en el archivo fuente.
+                properties[PROP_NINECES_12_17] = (
+                    parseValorNumerico(properties[PROP_NINECES_12_17], 0) ||
+                    parseValorNumerico(properties['18_A_20'], 0)
+                ) * 100;
+                properties[PROP_NINECES_18_29] = parseValorNumerico(properties[PROP_NINECES_18_29], 0) * 100;
+                properties[PROP_ENTIDAD] = normalizarTexto(properties[PROP_ENTIDAD]);
+            }),
+            asignar: data => { datosNinecesLimpios = data; },
+            esVisible: () => ninecesVisible,
+            desactivar: () => { ninecesVisible = false; },
+            aplicar: () => aplicarEscalaNineces(filtroEstadoActual)
+        }
+    };
+
+    return configuraciones[tipo] || null;
+}
+
+function actualizarEstadoVisualCarga(tipo) {
+    const carga = estadoCargaCapas[tipo];
+    if (!carga) return;
+
+    const textos = {
+        idle: '',
+        loading: 'Cargando capa…',
+        ready: '',
+        error: 'No se pudo cargar. Activa para reintentar.'
+    };
+
+    document.querySelectorAll(`[data-layer-status="${tipo}"]`).forEach(status => {
+        status.textContent = textos[carga.estado] || '';
+        status.title = carga.error?.message || '';
+        status.dataset.state = carga.estado;
+
+        const container = status.closest('.switch-container');
+        if (container) {
+            container.classList.toggle('is-loading', carga.estado === 'loading');
+            container.classList.toggle('has-load-error', carga.estado === 'error');
+            container.setAttribute('aria-busy', String(carga.estado === 'loading'));
+        }
+    });
+}
+
+function cargarCapaSociodemografica(tipo) {
+    const carga = estadoCargaCapas[tipo];
+    const configuracion = obtenerConfiguracionCapa(tipo);
+    if (!carga || !configuracion) return Promise.resolve(false);
+
+    if (carga.estado === 'ready') {
+        if (configuracion.esVisible()) configuracion.aplicar();
+        return Promise.resolve(true);
+    }
+    if (carga.estado === 'loading' && carga.promesa) return carga.promesa;
+
+    carga.estado = 'loading';
+    carga.error = null;
+    actualizarEstadoVisualCarga(tipo);
+
+    carga.promesa = (async () => {
+        const data = await fetchGeoJSON(configuracion.url, configuracion.etiqueta);
+        const datosPreparados = configuracion.preparar(data);
+        const source = map.getSource(configuracion.sourceId);
+        if (!source) throw new Error(`No se encontró la fuente ${configuracion.sourceId}.`);
+
+        configuracion.asignar(datosPreparados);
+        source.setData(datosPreparados);
+
+        carga.estado = 'ready';
+        carga.error = null;
+        carga.promesa = null;
+        actualizarEstadoVisualCarga(tipo);
+
+        if (configuracion.esVisible()) configuracion.aplicar();
+        console.log(`✓ ${configuracion.etiqueta} cargada`);
+        return true;
+    })().catch(error => {
+        carga.estado = 'error';
+        carga.error = error;
+        carga.promesa = null;
+        configuracion.desactivar();
+        toggleChecks(tipo, false);
+        actualizarVisibilidadLeyendaDemografica();
+        actualizarEstadoVisualCarga(tipo);
+        console.error(`Error cargando ${configuracion.etiqueta}:`, error);
+        return false;
+    });
+
+    return carga.promesa;
+}
+
 function calcularQuantiles(valores, numClases = 7) {
     const nums = valores.map(v => Number(v)).filter(v => !isNaN(v)).sort((a, b) => a - b);
     if (!nums.length) return [];
@@ -1314,9 +1530,11 @@ map.on('load', () => {
         className: 'delitos-hover-popup'
     });
 
-    map.addSource('estados-mexico', { type: 'geojson', data: ESTADOS_URL });
-    fetch(ESTADOS_URL)
-        .then(r => r.json())
+    map.addSource('estados-mexico', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] }
+    });
+    fetchGeoJSON(ESTADOS_URL, 'Límites estatales')
         .then(data => {
             datosEstadosMexico = data;
             const sourceEstados = map.getSource('estados-mexico');
@@ -1584,136 +1802,10 @@ map.on('load', () => {
     crearLeyenda();
     mapaListo = true;
 
-    fetch(DENSIDAD_URL).then(r => r.json()).then(data => {
-        const feats = data.features.map(f => {
-            if (!f.geometry) return f;
-            let necesitaCorreccion = false;
-            const c = f.geometry.coordinates;
-            if (c[0] && c[0][0]) {
-                const testCoord = typeof c[0][0][0] === 'number' ? c[0][0][0] : c[0][0][0][0];
-                if (Math.abs(testCoord) > 180) necesitaCorreccion = true;
-            }
-            if (necesitaCorreccion) f.geometry = corregirGeometria(f.geometry);
-
-            const rawVal = f.properties[PROP_DENSIDAD];
-            const val = typeof rawVal === 'string' ? parseFloat(rawVal.replace(/,/g, '')) : Number(rawVal);
-            f.properties[PROP_DENSIDAD] = isNaN(val) ? 0 : val;
-            f.properties[PROP_ENTIDAD] = f.properties[PROP_ENTIDAD] ? f.properties[PROP_ENTIDAD].trim() : '';
-            return f;
-        });
-
-        datosDensidadLimpios = { type: 'FeatureCollection', features: feats };
-        map.getSource('fuente-densidad-limpia').setData(datosDensidadLimpios);
-        console.log('✓ Densidad cargada');
-    }).catch(e => console.error("Error densidad:", e));
-
-    fetch(POBINDIGENA_URL).then(r => r.json()).then(data => {
-        const feats = data.features.map(f => {
-            if (!f.geometry) return f;
-            let necesitaCorreccion = false;
-            const c = f.geometry.coordinates;
-            if (c[0] && c[0][0]) {
-                const testCoord = typeof c[0][0][0] === 'number' ? c[0][0][0] : c[0][0][0][0];
-                if (Math.abs(testCoord) > 180) necesitaCorreccion = true;
-            }
-            if (necesitaCorreccion) f.geometry = corregirGeometria(f.geometry);
-
-            const rawVal = f.properties[PROP_INDIGENA];
-            const val = typeof rawVal === 'string' ? parseFloat(rawVal.replace(/,/g, '')) : Number(rawVal);
-            f.properties[PROP_INDIGENA] = isNaN(val) ? 0 : val;
-            f.properties.Entidad = f.properties.Entidad ? f.properties.Entidad.trim() : '';
-            return f;
-        });
-
-        datosIndigenaLimpios = { type: 'FeatureCollection', features: feats };
-        map.getSource('fuente-poblacion-indigena').setData(datosIndigenaLimpios);
-        console.log('✓ Población indígena cargada');
-    }).catch(e => console.error("Error población indígena:", e));
-
-    fetch(ESPACIOS_URL).then(r => r.json()).then(data => {
-        const feats = data.features.map(f => {
-            if (!f.geometry) return f;
-            let necesitaCorreccion = false;
-            const c = f.geometry.coordinates;
-            if (c[0] && c[0][0]) {
-                const testCoord = typeof c[0][0][0] === 'number' ? c[0][0][0] : c[0][0][0][0];
-                if (Math.abs(testCoord) > 180) necesitaCorreccion = true;
-            }
-            if (necesitaCorreccion) f.geometry = corregirGeometria(f.geometry);
-
-            const rawVal = f.properties[PROP_ESPACIOS];
-            const val = typeof rawVal === 'string' ? parseFloat(rawVal.replace(/,/g, '')) : Number(rawVal);
-            f.properties[PROP_ESPACIOS] = isNaN(val) ? 0 : val;
-            f.properties.Entidad = f.properties.Entidad ? f.properties.Entidad.trim() : '';
-            return f;
-        });
-
-        datosEspaciosLimpios = { type: 'FeatureCollection', features: feats };
-        map.getSource('fuente-espacios-culturales').setData(datosEspaciosLimpios);
-        console.log('✓ Espacios culturales cargados');
-    }).catch(e => console.error("Error espacios culturales:", e));
-
-    fetch(DELITOS_URL).then(r => r.json()).then(data => {
-        const feats = data.features.map(f => {
-            if (!f.geometry) return f;
-            let necesitaCorreccion = false;
-            const c = f.geometry.coordinates;
-            if (c[0] && c[0][0]) {
-                const testCoord = typeof c[0][0][0] === 'number' ? c[0][0][0] : c[0][0][0][0];
-                if (Math.abs(testCoord) > 180) necesitaCorreccion = true;
-            }
-            if (necesitaCorreccion) f.geometry = corregirGeometria(f.geometry);
-
-            const rawAcumulado = f.properties[PROP_DELITOS_ACUMULADO] ?? f.properties[PROP_DELITOS_LEGACY];
-            const rawTasa = f.properties[PROP_DELITOS_TASA];
-            f.properties[PROP_DELITOS_ACUMULADO] = parseValorNumerico(rawAcumulado, 0);
-            f.properties[PROP_DELITOS_TASA] = parseValorNumerico(rawTasa, 0);
-            // Mantener compatibilidad con lógica legacy existente
-            f.properties[PROP_DELITOS_LEGACY] = f.properties[PROP_DELITOS_ACUMULADO];
-            f.properties.Entidad = f.properties.Entidad ? f.properties.Entidad.trim() : '';
-            return f;
-        });
-
-        datosDelitosLimpios = { type: 'FeatureCollection', features: feats };
-        map.getSource('fuente-incidencia-delictiva').setData(datosDelitosLimpios);
-        console.log('✓ Incidencia delictiva cargada');
-    }).catch(e => console.error("Error delitos:", e));
-
-    fetch(NINECES_URL).then(r => r.json()).then(data => {
-        const feats = data.features.map(f => {
-            if (!f.geometry) return f;
-            let necesitaCorreccion = false;
-            const c = f.geometry.coordinates;
-            if (c[0] && c[0][0]) {
-                const testCoord = typeof c[0][0][0] === 'number' ? c[0][0][0] : c[0][0][0][0];
-                if (Math.abs(testCoord) > 180) necesitaCorreccion = true;
-            }
-            if (necesitaCorreccion) f.geometry = corregirGeometria(f.geometry);
-
-            const processVal = (prop) => {
-                const rawVal = f.properties[prop];
-                const val = typeof rawVal === 'string' ? parseFloat(rawVal.replace(/,/g, '')) : Number(rawVal);
-                return isNaN(val) ? 0 : val;
-            };
-
-            f.properties[PROP_NINECES_3_11] = processVal(PROP_NINECES_3_11) * 100;
-            // The file has a typo '18_A_20' instead of '12_A_17'
-            f.properties[PROP_NINECES_12_17] = (processVal(PROP_NINECES_12_17) || processVal('18_A_20')) * 100;
-            f.properties[PROP_NINECES_18_29] = processVal(PROP_NINECES_18_29) * 100;
-            f.properties.Entidad = f.properties.Entidad ? f.properties.Entidad.trim() : '';
-            return f;
-        });
-
-        datosNinecesLimpios = { type: 'FeatureCollection', features: feats };
-        map.getSource('fuente-concentracion-nineces').setData(datosNinecesLimpios);
-        console.log('✓ Concentración de niñeces cargada');
-    }).catch(e => console.error("Error niñeces:", e));
-
     // Cargar Plan Michoacán
-    fetch(PLAN_MICHOACAN_URL)
-        .then(response => response.json())
+    fetchGeoJSON(PLAN_MICHOACAN_URL, 'Plan Michoacán')
         .then(data => {
-            datosPlanMichoacan = corregirGeometria(data);
+            datosPlanMichoacan = prepararCapaMunicipal(data, 'Plan Michoacán', () => {});
 
             map.addSource('fuente-plan-michoacan', {
                 type: 'geojson',
@@ -2473,7 +2565,18 @@ window.manejarSwitchTerritoriosPaz = function (v) {
     }
 }
 
-// --- SWITCH HANDLERS (TIMEOUT FIX) ---
+// --- SWITCH HANDLERS ---
+
+function sincronizarCargaCapaSociodemografica(tipo, visible) {
+    const configuracion = obtenerConfiguracionCapa(tipo);
+    if (!configuracion) return;
+
+    if (visible) {
+        cargarCapaSociodemografica(tipo);
+    } else {
+        configuracion.aplicar();
+    }
+}
 
 window.manejarSwitchDensidad = function (v) {
     densidadVisible = v;
@@ -2485,8 +2588,7 @@ window.manejarSwitchDensidad = function (v) {
         if (planesVisible) { planesVisible = false; toggleChecks('planes', false); manejarSwitchPlanes(false); }
     }
     actualizarVisibilidadLeyendaDemografica();
-    // BUG FIX: Increased delay to 200ms to allow visibility/filter changes to propagate
-    setTimeout(() => aplicarEscalaDensidad(filtroEstadoActual), 200);
+    sincronizarCargaCapaSociodemografica('densidad', v);
 }
 
 window.manejarSwitchIndigena = function (v) {
@@ -2499,8 +2601,7 @@ window.manejarSwitchIndigena = function (v) {
         if (planesVisible) { planesVisible = false; toggleChecks('planes', false); manejarSwitchPlanes(false); }
     }
     actualizarVisibilidadLeyendaDemografica();
-    // BUG FIX: Increased delay to 200ms
-    setTimeout(() => aplicarEscalaIndigena(filtroEstadoActual), 200);
+    sincronizarCargaCapaSociodemografica('indigena', v);
 }
 
 window.manejarSwitchEspacios = function (v) {
@@ -2513,8 +2614,7 @@ window.manejarSwitchEspacios = function (v) {
         if (planesVisible) { planesVisible = false; toggleChecks('planes', false); manejarSwitchPlanes(false); }
     }
     actualizarVisibilidadLeyendaDemografica();
-    // BUG FIX: Increased delay to 200ms
-    setTimeout(() => aplicarEscalaEspacios(filtroEstadoActual), 200);
+    sincronizarCargaCapaSociodemografica('espacios', v);
 }
 
 window.manejarSwitchDelitos = function (v) {
@@ -2527,8 +2627,7 @@ window.manejarSwitchDelitos = function (v) {
         if (planesVisible) { planesVisible = false; toggleChecks('planes', false); manejarSwitchPlanes(false); }
     }
     actualizarVisibilidadLeyendaDemografica();
-    // BUG FIX: Increased delay to 200ms
-    setTimeout(() => aplicarEscalaDelitos(filtroEstadoActual), 200);
+    sincronizarCargaCapaSociodemografica('delitos', v);
 }
 
 window.manejarSwitchNineces = function (v) {
@@ -2541,8 +2640,7 @@ window.manejarSwitchNineces = function (v) {
         if (planesVisible) { planesVisible = false; toggleChecks('planes', false); manejarSwitchPlanes(false); }
     }
     actualizarVisibilidadLeyendaDemografica();
-    // BUG FIX: Increased delay to 200ms
-    setTimeout(() => aplicarEscalaNineces(filtroEstadoActual), 200);
+    sincronizarCargaCapaSociodemografica('nineces', v);
 }
 
 window.manejarSwitchPlanes = function (v) {
@@ -2817,7 +2915,7 @@ function crearLeyenda() {
             body.appendChild(d);
         });
 
-    const addSw = (id, txt, fn) => {
+    const addSw = (id, txt, fn, tipoCarga = null) => {
         const d = document.createElement('div');
         d.className = 'switch-container';
         d.innerHTML = `
@@ -2826,6 +2924,7 @@ function crearLeyenda() {
                 <span class="switch-slider"></span>
                 <span class="switch-text">${txt}</span>
             </label>
+            ${tipoCarga ? `<span class="layer-load-status" data-layer-status="${tipoCarga}" data-state="idle" role="status" aria-live="polite"></span>` : ''}
         `;
         body.appendChild(d);
     };
@@ -2852,8 +2951,8 @@ function crearLeyenda() {
     separador.innerHTML = '<span class="section-title">Capas sociodemográficas</span>';
     body.appendChild(separador);
 
-    addSw('densidad-switch', 'Densidad poblacional', 'manejarSwitchDensidad(this.checked)');
-    addSw('nineces-switch', 'Concentración Niñeces y jóvenes', 'manejarSwitchNineces(this.checked)');
+    addSw('densidad-switch', 'Densidad poblacional', 'manejarSwitchDensidad(this.checked)', 'densidad');
+    addSw('nineces-switch', 'Concentración Niñeces y jóvenes', 'manejarSwitchNineces(this.checked)', 'nineces');
 
     const ninecesModo = document.createElement('div');
     ninecesModo.id = 'nineces-mode-container';
@@ -2869,9 +2968,9 @@ function crearLeyenda() {
     `;
     body.appendChild(ninecesModo);
 
-    addSw('indigena-switch', '% de población indígena', 'manejarSwitchIndigena(this.checked)');
-    addSw('espacios-switch', 'Núm. de espacios culturales por municipio', 'manejarSwitchEspacios(this.checked)');
-    addSw('delitos-switch', 'Incidencia delictiva <span style="font-size:10.5px; color:#888; font-weight:normal; margin-left:4px;">(Ene-Feb 2026)</span>', 'manejarSwitchDelitos(this.checked)');
+    addSw('indigena-switch', '% de población indígena', 'manejarSwitchIndigena(this.checked)', 'indigena');
+    addSw('espacios-switch', 'Núm. de espacios culturales por municipio', 'manejarSwitchEspacios(this.checked)', 'espacios');
+    addSw('delitos-switch', 'Incidencia delictiva <span style="font-size:10.5px; color:#888; font-weight:normal; margin-left:4px;">(Ene-Feb 2026)</span>', 'manejarSwitchDelitos(this.checked)', 'delitos');
 
     const delitosModo = document.createElement('div');
     delitosModo.id = 'delitos-mode-container';
