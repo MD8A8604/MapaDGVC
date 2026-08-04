@@ -15,6 +15,8 @@ const NINECES_URL = 'https://raw.githubusercontent.com/MD8A8604/NNYJ/main/Concen
 const PLAN_MICHOACAN_URL = 'https://raw.githubusercontent.com/MD8A8604/Michoacan/refs/heads/main/PlanMichoacan.geojson';
 const PLANES_URL = 'https://raw.githubusercontent.com/MD8A8604/Cuenca_Istmo/main/Istmo_cuenca.geojson';
 const TERRITORIOS_PAZ_URL = 'https://raw.githubusercontent.com/MD8A8604/TP/main/Territorios%20de%20paz.geojson';
+const PROMOTORIAS_AGEBS_URL = 'https://raw.githubusercontent.com/MD8A8604/agebs_tp/refs/heads/main/TP_AGEBS.json';
+const PROMOTORIAS_ENCUESTAS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTmvtknwAW3b2TB_6edYnmVjR70T5lOFOAqLsVmbcqdSksUS0zNRuJc2gh9EIoVGDnxC2wC4UOuiSgk/pub?gid=803912037&single=true&output=csv';
 const GEOJSON_FETCH_TIMEOUT_MS = 120000;
 
 const ID_CAPA_DENSIDAD = 'capa-densidad-limpia';
@@ -27,6 +29,9 @@ const ID_CAPA_PLAN_MICHOACAN = 'capa-plan-michoacan';
 const ID_CAPA_PLAN_MICHOACAN_BORDE = 'capa-plan-michoacan-borde';
 const ID_CAPA_TERRITORIOS_PAZ = 'capa-territorios-paz';
 const ID_CAPA_TERRITORIOS_PAZ_BORDE = 'capa-territorios-paz-borde';
+const ID_CAPA_PROMOTORIAS_AGEBS = 'capa-promotorias-agebs';
+const ID_CAPA_PROMOTORIAS_AGEBS_BORDE = 'capa-promotorias-agebs-borde';
+const ID_CAPA_PROMOTORIAS_ENCUESTAS = 'capa-promotorias-encuestas';
 
 const PROP_ENTIDAD = 'Entidad';
 const PROP_DENSIDAD = 'Dens_Pob_km2';
@@ -219,6 +224,7 @@ let filtroMunicipioActual = 'Todos los municipios';
 let filtrosProgramasActivos = [];
 let filtroEstatus = 'Activo';
 let territoriosPazVisible = false;
+let promotoriasVisible = false;
 let densidadVisible = false;
 let indigenaVisible = false;
 let espaciosVisible = false;
@@ -243,6 +249,7 @@ let popupTerritoriosPazHover = null;
 let popupPlanMichoacanHover = null;
 
 const estadoCargaCapas = {
+    promotorias: { estado: 'idle', promesa: null, error: null },
     densidad: { estado: 'idle', promesa: null, error: null },
     indigena: { estado: 'idle', promesa: null, error: null },
     espacios: { estado: 'idle', promesa: null, error: null },
@@ -1118,7 +1125,7 @@ function cambiarPerfil(nuevoPerfil) {
 }
 
 // --- UTILIDADES ---
-async function fetchCSVAsGeoJSON(url) {
+async function fetchCSVAsGeoJSON(url, { dynamicTyping = true } = {}) {
     try {
         const response = await fetch(url);
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
@@ -1127,7 +1134,7 @@ async function fetchCSVAsGeoJSON(url) {
         return new Promise((resolve, reject) => {
             Papa.parse(csvText, {
                 header: true,
-                dynamicTyping: true,
+                dynamicTyping,
                 skipEmptyLines: true,
                 complete: function (results) {
                     const features = results.data
@@ -1381,6 +1388,76 @@ function cargarCapaSociodemografica(tipo) {
     return carga.promesa;
 }
 
+function aplicarVisibilidadPromotorias() {
+    const lista = [
+        ID_CAPA_PROMOTORIAS_AGEBS,
+        ID_CAPA_PROMOTORIAS_AGEBS_BORDE,
+        ID_CAPA_PROMOTORIAS_ENCUESTAS
+    ];
+    const visible = promotoriasVisible && estadoCargaCapas.promotorias.estado === 'ready';
+
+    lista.forEach(layerId => {
+        if (map.getLayer(layerId)) {
+            map.setLayoutProperty(layerId, 'visibility', visible ? 'visible' : 'none');
+        }
+    });
+
+    const leyenda = document.getElementById('promotorias-legend');
+    if (leyenda) leyenda.style.display = promotoriasVisible ? 'block' : 'none';
+}
+
+function cargarPromotorias() {
+    const carga = estadoCargaCapas.promotorias;
+
+    if (carga.estado === 'ready') {
+        aplicarVisibilidadPromotorias();
+        return Promise.resolve(true);
+    }
+    if (carga.estado === 'loading' && carga.promesa) return carga.promesa;
+
+    carga.estado = 'loading';
+    carga.error = null;
+    actualizarEstadoVisualCarga('promotorias');
+
+    carga.promesa = Promise.all([
+        fetchGeoJSON(PROMOTORIAS_AGEBS_URL, 'AGEBS de Promotorías'),
+        fetchCSVAsGeoJSON(PROMOTORIAS_ENCUESTAS_URL, { dynamicTyping: false })
+    ]).then(([agebs, encuestas]) => {
+        if (!encuestas.features.length) {
+            throw new Error('La hoja de Promotorías no contiene coordenadas válidas.');
+        }
+
+        const sourceAgebs = map.getSource('fuente-promotorias-agebs');
+        const sourceEncuestas = map.getSource('fuente-promotorias-encuestas');
+        if (!sourceAgebs || !sourceEncuestas) {
+            throw new Error('No se encontraron las fuentes de Promotorías.');
+        }
+
+        sourceAgebs.setData(agebs);
+        sourceEncuestas.setData(encuestas);
+
+        carga.estado = 'ready';
+        carga.error = null;
+        carga.promesa = null;
+        actualizarEstadoVisualCarga('promotorias');
+        aplicarVisibilidadPromotorias();
+        console.log(`✓ Promotorías cargadas: ${agebs.features.length} AGEBS y ${encuestas.features.length} puntos`);
+        return true;
+    }).catch(error => {
+        carga.estado = 'error';
+        carga.error = error;
+        carga.promesa = null;
+        promotoriasVisible = false;
+        toggleChecks('promotorias', false);
+        actualizarEstadoVisualCarga('promotorias');
+        aplicarVisibilidadPromotorias();
+        console.error('Error cargando Promotorías:', error);
+        return false;
+    });
+
+    return carga.promesa;
+}
+
 function calcularQuantiles(valores, numClases = 7) {
     const nums = valores.map(v => Number(v)).filter(v => !isNaN(v)).sort((a, b) => a - b);
     if (!nums.length) return [];
@@ -1604,6 +1681,63 @@ map.on('load', () => {
         }
     });
 
+    map.addSource('fuente-promotorias-agebs', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] }
+    });
+    map.addSource('fuente-promotorias-encuestas', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] }
+    });
+    map.addLayer({
+        id: ID_CAPA_PROMOTORIAS_AGEBS,
+        type: 'fill',
+        source: 'fuente-promotorias-agebs',
+        layout: { visibility: 'none' },
+        paint: {
+            'fill-color': '#2389B9',
+            'fill-opacity': 0.22
+        }
+    }, 'puntos-geojson');
+    map.addLayer({
+        id: ID_CAPA_PROMOTORIAS_AGEBS_BORDE,
+        type: 'line',
+        source: 'fuente-promotorias-agebs',
+        layout: { visibility: 'none' },
+        paint: {
+            'line-color': '#146B87',
+            'line-width': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                4, 0.25,
+                8, 0.6,
+                12, 1.1
+            ],
+            'line-opacity': 0.8
+        }
+    }, 'puntos-geojson');
+    map.addLayer({
+        id: ID_CAPA_PROMOTORIAS_ENCUESTAS,
+        type: 'circle',
+        source: 'fuente-promotorias-encuestas',
+        layout: { visibility: 'none' },
+        paint: {
+            'circle-radius': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                4, 4,
+                8, 6,
+                12, 8
+            ],
+            'circle-color': '#FF8C00',
+            'circle-opacity': 0.95,
+            'circle-stroke-color': '#FFFFFF',
+            'circle-stroke-width': 1.5
+        }
+    });
+
     map.addSource('fuente-territorios-paz', {
         type: 'geojson',
         data: TERRITORIOS_PAZ_URL
@@ -1693,6 +1827,52 @@ map.on('load', () => {
 
     map.on('mouseenter', 'puntos-geojson', () => map.getCanvas().style.cursor = 'pointer');
     map.on('mouseleave', 'puntos-geojson', () => map.getCanvas().style.cursor = '');
+
+    map.on('click', ID_CAPA_PROMOTORIAS_ENCUESTAS, (e) => {
+        if (modoMedicion || !promotoriasVisible || !e.features?.length) return;
+        const propiedades = e.features[0].properties || {};
+        const generarFila = (etiqueta, valor) => {
+            const valorSeguro = escapeHTML(valor);
+            if (!valorSeguro) return '';
+            return `
+                <div style="margin-bottom:4px; line-height:1.4;">
+                    <span style="color:#999; font-weight:400;">${escapeHTML(etiqueta)}:</span>
+                    <span style="color:#000; font-weight:500;">${valorSeguro}</span>
+                </div>
+            `;
+        };
+
+        const titulo = escapeHTML(propiedades.Actividad || propiedades.Proyecto || 'Punto de aplicación');
+        const contenido = `
+            <div style="font-family:'Noto Sans',sans-serif; min-width:240px; padding:5px 0;">
+                <div style="color:#146B87; font-size:11px; font-weight:700; margin-bottom:4px;">
+                    Promotorías cívico culturales
+                </div>
+                <h3 style="margin:0 0 10px 0; color:#000; font-size:1.17em; line-height:1.2;">
+                    ${titulo}
+                </h3>
+                ${generarFila('Estado', propiedades.Estado)}
+                ${generarFila('Municipio', propiedades.Municipio)}
+                ${generarFila('Localidad', propiedades.Localidad)}
+                ${generarFila('Sede', propiedades.Sedes)}
+                ${generarFila('Estatus', propiedades.Estatus)}
+                ${generarFila('AGEB', propiedades.Ageb)}
+                ${generarFila('Cédulas aplicadas', propiedades['Cédulas aplicadas'])}
+            </div>
+        `;
+
+        new mapboxgl.Popup({ maxWidth: '300px' })
+            .setLngLat(e.lngLat)
+            .setHTML(contenido)
+            .addTo(map);
+    });
+
+    map.on('mouseenter', ID_CAPA_PROMOTORIAS_ENCUESTAS, () => {
+        if (promotoriasVisible) map.getCanvas().style.cursor = 'pointer';
+    });
+    map.on('mouseleave', ID_CAPA_PROMOTORIAS_ENCUESTAS, () => {
+        map.getCanvas().style.cursor = '';
+    });
 
     map.on('mousemove', ID_CAPA_ESPACIOS, (e) => {
         if (modoMedicion || !espaciosVisible || !popupEspaciosHover || !e.features?.length) return;
@@ -2546,6 +2726,14 @@ window.manejarFiltroGrupoSemilleros = function () {
     manejarFiltroGrupoProgramas(GRUPO_SEMILLEROS.programas);
 }
 
+window.manejarSwitchPromotorias = function (v) {
+    promotoriasVisible = v;
+    toggleChecks('promotorias', v);
+    aplicarVisibilidadPromotorias();
+
+    if (v) cargarPromotorias();
+}
+
 window.manejarSwitchTerritoriosPaz = function (v) {
     territoriosPazVisible = v;
     if (map.getLayer(ID_CAPA_TERRITORIOS_PAZ)) {
@@ -2731,6 +2919,7 @@ window.resetearFiltros = function () {
     gruposLeyendaExpandidos[GRUPO_SEMILLEROS.id] = false;
     actualizarVisibilidadGrupoLeyenda(GRUPO_SEMILLEROS.id);
     territoriosPazVisible = false;
+    promotoriasVisible = false;
     filtroEstatus = 'Activo';
     filtroEstadoActual = 'Todos los estados';
     filtroMunicipioActual = 'Todos los municipios';
@@ -2747,6 +2936,7 @@ window.resetearFiltros = function () {
         b.classList.toggle('active', b.dataset.estatus === 'Activo');
     });
     actualizarBotonesModoDelitos();
+    manejarSwitchPromotorias(false);
     manejarSwitchTerritoriosPaz(false);
     manejarSwitchDensidad(false);
     manejarSwitchIndigena(false);
@@ -2943,6 +3133,24 @@ function crearLeyenda() {
         </div>
     `;
     body.appendChild(pazLegend);
+
+    addSw('promotorias-switch', 'Promotorías cívico culturales', 'manejarSwitchPromotorias(this.checked)', 'promotorias');
+
+    const promotoriasLegend = document.createElement('div');
+    promotoriasLegend.id = 'promotorias-legend';
+    promotoriasLegend.className = 'strategy-layer-legend';
+    promotoriasLegend.style.display = 'none';
+    promotoriasLegend.innerHTML = `
+        <div class="strategy-layer-legend-row">
+            <span class="promotorias-ageb-key" aria-hidden="true"></span>
+            <span>AGEBS de Territorios de Paz</span>
+        </div>
+        <div class="strategy-layer-legend-row">
+            <span class="promotorias-point-key" aria-hidden="true"></span>
+            <span>Aplicación de encuestas</span>
+        </div>
+    `;
+    body.appendChild(promotoriasLegend);
 
     addSw('plan-michoacan-switch', 'Plan Michoacán', 'manejarSwitchPlanMichoacan(this.checked)');
 
