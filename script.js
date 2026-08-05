@@ -1449,13 +1449,25 @@ function esPuntoGeoJSONValido(feature) {
         && latitude >= -90 && latitude <= 90;
 }
 
+function normalizarClaveGeografica(valor) {
+    return normalizarTexto(valor)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase();
+}
+
 function obtenerEspaciosPuntosFiltrados() {
     if (!datosEspaciosPuntos) return { type: 'FeatureCollection', features: [] };
 
+    const estadoBuscado = normalizarClaveGeografica(filtroEstadoActual);
+    const municipioBuscado = normalizarClaveGeografica(filtroMunicipioActual);
+
     const features = datosEspaciosPuntos.features.filter(feature => {
         const properties = feature.properties || {};
-        if (filtroEstadoActual !== 'Todos los estados' && properties.nom_ent !== filtroEstadoActual) return false;
-        if (filtroMunicipioActual !== 'Todos los municipios' && properties.nom_mun !== filtroMunicipioActual) return false;
+        if (filtroEstadoActual !== 'Todos los estados'
+            && normalizarClaveGeografica(properties.nom_ent_corto || properties.nom_ent) !== estadoBuscado) return false;
+        if (filtroMunicipioActual !== 'Todos los municipios'
+            && normalizarClaveGeografica(properties.nom_mun) !== municipioBuscado) return false;
         return true;
     });
 
@@ -1466,6 +1478,14 @@ function actualizarDatosEspaciosPuntosFiltrados() {
     const source = map.getSource('fuente-espacios-puntos');
     if (!source || !datosEspaciosPuntos) return;
     source.setData(obtenerEspaciosPuntosFiltrados());
+    map.triggerRepaint();
+
+    if (espaciosVisible && modoEspaciosActual === 'puntos') {
+        map.once('idle', () => {
+            aplicarVisibilidadEspaciosPuntos();
+            map.triggerRepaint();
+        });
+    }
 }
 
 function aplicarVisibilidadEspaciosPuntos() {
@@ -1481,7 +1501,6 @@ function aplicarVisibilidadEspaciosPuntos() {
             if (visible) map.moveLayer(layerId);
         });
 
-    if (visible) actualizarDatosEspaciosPuntosFiltrados();
 }
 
 function cargarEspaciosPuntos() {
@@ -1729,13 +1748,7 @@ map.on('load', () => {
         filter: ['has', 'point_count'],
         layout: { visibility: 'none' },
         paint: {
-            'circle-color': [
-                'step',
-                ['get', 'point_count'],
-                '#C994C7',
-                25, '#DF65B0',
-                100, '#980043'
-            ],
+            'circle-color': '#455A64',
             'circle-radius': [
                 'step',
                 ['get', 'point_count'],
@@ -1768,18 +1781,19 @@ map.on('load', () => {
         filter: ['!', ['has', 'point_count']],
         layout: { visibility: 'none' },
         paint: {
-            'circle-color': [
-                'match',
-                ['get', 'Estrategia'],
-                'Territorios de Paz', '#238B45',
-                'Plan Michoacán', '#FF8C00',
-                'Plan Michoacán | Territorios de paz', '#7A0177',
-                '#7A0177'
+            'circle-color': '#455A64',
+            'circle-radius': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                4, 3.2,
+                8, 4.4,
+                12, 5.5,
+                16, 7
             ],
-            'circle-radius': 5,
-            'circle-opacity': 0.9,
+            'circle-opacity': 0.82,
             'circle-stroke-color': '#FFFFFF',
-            'circle-stroke-width': 1.2
+            'circle-stroke-width': 1
         }
     });
 
@@ -2157,7 +2171,7 @@ map.on('load', () => {
         const titulo = escapeHTML(properties.nombre || 'Espacio cultural');
         const contenido = `
             <div style="font-family:'Noto Sans',sans-serif; min-width:240px; padding:5px 0;">
-                <div style="color:#7A0177; font-size:11px; font-weight:700; margin-bottom:4px;">
+                <div style="color:#455A64; font-size:11px; font-weight:700; margin-bottom:4px;">
                     ${escapeHTML(properties.Tipo || 'Espacio cultural')}
                 </div>
                 <h3 style="margin:0 0 10px 0; color:#000; font-size:1.17em; line-height:1.2;">${titulo}</h3>
@@ -3483,9 +3497,7 @@ function crearLeyenda() {
         </div>
         <span class="layer-load-status espacios-puntos-load-status" data-layer-status="espacios-puntos" data-state="idle" role="status" aria-live="polite"></span>
         <div id="espacios-puntos-legend" class="espacios-puntos-legend">
-            <span><i class="espacios-point-key is-tp"></i>Territorios de Paz</span>
-            <span><i class="espacios-point-key is-pm"></i>Plan Michoacán</span>
-            <span><i class="espacios-point-key is-both"></i>Ambos</span>
+            <span><i class="espacios-point-key"></i>Espacios culturales en TP - PM</span>
             <em>Fuente: SIC - SC</em>
         </div>
     `;
