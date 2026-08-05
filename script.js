@@ -10,6 +10,7 @@ const ESTADOS_URL = 'https://raw.githubusercontent.com/MD8A8604/EDOSMEX1/refs/he
 const DENSIDAD_URL = 'https://raw.githubusercontent.com/MD8A8604/Densidad/refs/heads/main/DP.json';
 const POBINDIGENA_URL = 'https://raw.githubusercontent.com/MD8A8604/ponindigena/refs/heads/main/PI.json';
 const ESPACIOS_URL = 'https://raw.githubusercontent.com/MD8A8604/Espaciosculturales/main/Espacios%20culturales.geojson';
+const ESPACIOS_PUNTOS_URL = 'https://raw.githubusercontent.com/MD8A8604/Puntos_infra_cul_tp_pm/main/Infraestructura%20cultural_TP_PM.geojson';
 const DELITOS_URL = 'https://raw.githubusercontent.com/MD8A8604/Incidencia-delictiva/main/Delitos_oct.geojson';
 const NINECES_URL = 'https://raw.githubusercontent.com/MD8A8604/NNYJ/main/Concentraci%C3%B3n_ni%C3%B1eces.geojson';
 const PLAN_MICHOACAN_URL = 'https://raw.githubusercontent.com/MD8A8604/Michoacan/refs/heads/main/PlanMichoacan.geojson';
@@ -23,6 +24,9 @@ const ID_CAPA_DENSIDAD = 'capa-densidad-limpia';
 const ID_CAPA_PLANES = 'capa-planes';
 const ID_CAPA_INDIGENA = 'capa-poblacion-indigena';
 const ID_CAPA_ESPACIOS = 'capa-espacios-culturales';
+const ID_CAPA_ESPACIOS_PUNTOS_CLUSTER = 'capa-espacios-puntos-cluster';
+const ID_CAPA_ESPACIOS_PUNTOS_CONTEO = 'capa-espacios-puntos-conteo';
+const ID_CAPA_ESPACIOS_PUNTOS = 'capa-espacios-puntos';
 const ID_CAPA_DELITOS = 'capa-incidencia-delictiva';
 const ID_CAPA_NINECES = 'capa-concentracion-nineces';
 const ID_CAPA_PLAN_MICHOACAN = 'capa-plan-michoacan';
@@ -228,6 +232,7 @@ let promotoriasVisible = false;
 let densidadVisible = false;
 let indigenaVisible = false;
 let espaciosVisible = false;
+let modoEspaciosActual = 'acumulado';
 let delitosVisible = false;
 let modoDelitosActual = 'acumulado';
 let ninecesVisible = false;
@@ -238,6 +243,7 @@ let datosOriginales = [];
 let datosDensidadLimpios = null;
 let datosIndigenaLimpios = null;
 let datosEspaciosLimpios = null;
+let datosEspaciosPuntos = null;
 let datosDelitosLimpios = null;
 let datosNinecesLimpios = null;
 let datosPlanMichoacan = null;
@@ -253,6 +259,7 @@ const estadoCargaCapas = {
     densidad: { estado: 'idle', promesa: null, error: null },
     indigena: { estado: 'idle', promesa: null, error: null },
     espacios: { estado: 'idle', promesa: null, error: null },
+    'espacios-puntos': { estado: 'idle', promesa: null, error: null },
     delitos: { estado: 'idle', promesa: null, error: null },
     nineces: { estado: 'idle', promesa: null, error: null }
 };
@@ -442,6 +449,46 @@ function obtenerResumenPuntosParaZoom(estado = filtroEstadoActual, municipio = '
         spreadLng: Math.abs(bounds.getEast() - bounds.getWest()),
         spreadLat: Math.abs(bounds.getNorth() - bounds.getSouth())
     };
+}
+
+function actualizarBotonesModoEspacios() {
+    const esAcumulado = modoEspaciosActual === 'acumulado';
+    const acumulado = document.getElementById('espacios-mode-acumulado');
+    const puntos = document.getElementById('espacios-mode-puntos');
+    if (acumulado) acumulado.classList.toggle('active', esAcumulado);
+    if (puntos) puntos.classList.toggle('active', !esAcumulado);
+}
+
+function actualizarVisibilidadSelectorModoEspacios() {
+    const container = document.getElementById('espacios-mode-container');
+    if (container) container.style.display = espaciosVisible ? 'block' : 'none';
+
+    const mostrarPuntos = espaciosVisible && modoEspaciosActual === 'puntos';
+    const leyenda = document.getElementById('espacios-puntos-legend');
+    if (leyenda) leyenda.style.display = mostrarPuntos ? 'flex' : 'none';
+
+    const statusAcumulado = document.querySelector('[data-layer-status="espacios"]');
+    if (statusAcumulado) statusAcumulado.style.display = mostrarPuntos ? 'none' : '';
+
+    const status = document.querySelector('[data-layer-status="espacios-puntos"]');
+    const carga = estadoCargaCapas['espacios-puntos'];
+    if (status) {
+        const mostrarStatus = mostrarPuntos && (carga.estado === 'loading' || carga.estado === 'error');
+        status.style.display = mostrarStatus ? 'block' : 'none';
+    }
+}
+
+window.manejarCambioModoEspacios = function (modo) {
+    if (modo !== 'acumulado' && modo !== 'puntos') return;
+    modoEspaciosActual = modo;
+    actualizarBotonesModoEspacios();
+    if (popupEspaciosHover) popupEspaciosHover.remove();
+
+    if (espaciosVisible) {
+        aplicarEscalaEspacios(filtroEstadoActual);
+        sincronizarCargaEspaciosActiva();
+    }
+    actualizarVisibilidadLeyendaDemografica();
 }
 
 function actualizarBotonesModoDelitos() {
@@ -1272,8 +1319,10 @@ function obtenerConfiguracionCapa(tipo) {
                 properties[PROP_ENTIDAD] = normalizarTexto(properties[PROP_ENTIDAD]);
             }),
             asignar: data => { datosEspaciosLimpios = data; },
-            esVisible: () => espaciosVisible,
-            desactivar: () => { espaciosVisible = false; },
+            esVisible: () => espaciosVisible && modoEspaciosActual === 'acumulado',
+            desactivar: () => {
+                if (modoEspaciosActual === 'acumulado') espaciosVisible = false;
+            },
             aplicar: () => aplicarEscalaEspacios(filtroEstadoActual)
         },
         delitos: {
@@ -1377,8 +1426,9 @@ function cargarCapaSociodemografica(tipo) {
         carga.estado = 'error';
         carga.error = error;
         carga.promesa = null;
+        const desactivarSwitch = tipo !== 'espacios' || modoEspaciosActual === 'acumulado';
         configuracion.desactivar();
-        toggleChecks(tipo, false);
+        if (desactivarSwitch) toggleChecks(tipo, false);
         actualizarVisibilidadLeyendaDemografica();
         actualizarEstadoVisualCarga(tipo);
         console.error(`Error cargando ${configuracion.etiqueta}:`, error);
@@ -1386,6 +1436,109 @@ function cargarCapaSociodemografica(tipo) {
     });
 
     return carga.promesa;
+}
+
+function esPuntoGeoJSONValido(feature) {
+    if (feature?.geometry?.type !== 'Point') return false;
+    const coordinates = feature.geometry.coordinates;
+    if (!Array.isArray(coordinates) || coordinates.length < 2) return false;
+    const longitude = Number(coordinates[0]);
+    const latitude = Number(coordinates[1]);
+    return Number.isFinite(longitude) && Number.isFinite(latitude)
+        && longitude >= -180 && longitude <= 180
+        && latitude >= -90 && latitude <= 90;
+}
+
+function obtenerEspaciosPuntosFiltrados() {
+    if (!datosEspaciosPuntos) return { type: 'FeatureCollection', features: [] };
+
+    const features = datosEspaciosPuntos.features.filter(feature => {
+        const properties = feature.properties || {};
+        if (filtroEstadoActual !== 'Todos los estados' && properties.nom_ent !== filtroEstadoActual) return false;
+        if (filtroMunicipioActual !== 'Todos los municipios' && properties.nom_mun !== filtroMunicipioActual) return false;
+        return true;
+    });
+
+    return { type: 'FeatureCollection', features };
+}
+
+function actualizarDatosEspaciosPuntosFiltrados() {
+    const source = map.getSource('fuente-espacios-puntos');
+    if (!source || !datosEspaciosPuntos) return;
+    source.setData(obtenerEspaciosPuntosFiltrados());
+}
+
+function aplicarVisibilidadEspaciosPuntos() {
+    const visible = espaciosVisible
+        && modoEspaciosActual === 'puntos'
+        && estadoCargaCapas['espacios-puntos'].estado === 'ready';
+    const visibility = visible ? 'visible' : 'none';
+
+    [ID_CAPA_ESPACIOS_PUNTOS_CLUSTER, ID_CAPA_ESPACIOS_PUNTOS_CONTEO, ID_CAPA_ESPACIOS_PUNTOS]
+        .forEach(layerId => {
+            if (!map.getLayer(layerId)) return;
+            map.setLayoutProperty(layerId, 'visibility', visibility);
+            if (visible) map.moveLayer(layerId);
+        });
+
+    if (visible) actualizarDatosEspaciosPuntosFiltrados();
+}
+
+function cargarEspaciosPuntos() {
+    const carga = estadoCargaCapas['espacios-puntos'];
+    if (carga.estado === 'ready') {
+        aplicarVisibilidadEspaciosPuntos();
+        return Promise.resolve(true);
+    }
+    if (carga.estado === 'loading' && carga.promesa) return carga.promesa;
+
+    carga.estado = 'loading';
+    carga.error = null;
+    actualizarEstadoVisualCarga('espacios-puntos');
+    actualizarVisibilidadSelectorModoEspacios();
+
+    carga.promesa = fetchGeoJSON(ESPACIOS_PUNTOS_URL, 'Puntos de espacios culturales')
+        .then(data => {
+            const features = data.features.filter(esPuntoGeoJSONValido);
+            if (!features.length) throw new Error('La fuente de espacios culturales no contiene puntos válidos.');
+
+            datosEspaciosPuntos = { type: 'FeatureCollection', features };
+            carga.estado = 'ready';
+            carga.error = null;
+            carga.promesa = null;
+            actualizarDatosEspaciosPuntosFiltrados();
+            actualizarEstadoVisualCarga('espacios-puntos');
+            actualizarVisibilidadSelectorModoEspacios();
+            aplicarVisibilidadEspaciosPuntos();
+            console.log(`✓ Puntos de espacios culturales cargados: ${features.length}`);
+            return true;
+        })
+        .catch(error => {
+            carga.estado = 'error';
+            carga.error = error;
+            carga.promesa = null;
+            actualizarEstadoVisualCarga('espacios-puntos');
+            actualizarVisibilidadSelectorModoEspacios();
+            aplicarVisibilidadEspaciosPuntos();
+            console.error('Error cargando puntos de espacios culturales:', error);
+            return false;
+        });
+
+    return carga.promesa;
+}
+
+function sincronizarCargaEspaciosActiva() {
+    aplicarVisibilidadEspaciosPuntos();
+    if (!espaciosVisible) {
+        aplicarEscalaEspacios(filtroEstadoActual);
+        return;
+    }
+
+    if (modoEspaciosActual === 'puntos') {
+        cargarEspaciosPuntos();
+    } else {
+        sincronizarCargaCapaSociodemografica('espacios', true);
+    }
 }
 
 function aplicarVisibilidadPromotorias() {
@@ -1560,6 +1713,74 @@ map.on('load', () => {
         source: 'fuente-espacios-culturales',
         layout: { visibility: 'none' },
         paint: { 'fill-color': '#ccc', 'fill-opacity': 0.5 }
+    });
+
+    map.addSource('fuente-espacios-puntos', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+        cluster: true,
+        clusterMaxZoom: 14,
+        clusterRadius: 45
+    });
+    map.addLayer({
+        id: ID_CAPA_ESPACIOS_PUNTOS_CLUSTER,
+        type: 'circle',
+        source: 'fuente-espacios-puntos',
+        filter: ['has', 'point_count'],
+        layout: { visibility: 'none' },
+        paint: {
+            'circle-color': [
+                'step',
+                ['get', 'point_count'],
+                '#C994C7',
+                25, '#DF65B0',
+                100, '#980043'
+            ],
+            'circle-radius': [
+                'step',
+                ['get', 'point_count'],
+                15,
+                25, 20,
+                100, 25
+            ],
+            'circle-opacity': 0.88,
+            'circle-stroke-color': '#FFFFFF',
+            'circle-stroke-width': 1.2
+        }
+    });
+    map.addLayer({
+        id: ID_CAPA_ESPACIOS_PUNTOS_CONTEO,
+        type: 'symbol',
+        source: 'fuente-espacios-puntos',
+        filter: ['has', 'point_count'],
+        layout: {
+            visibility: 'none',
+            'text-field': ['get', 'point_count_abbreviated'],
+            'text-size': 11,
+            'text-allow-overlap': true
+        },
+        paint: { 'text-color': '#FFFFFF' }
+    });
+    map.addLayer({
+        id: ID_CAPA_ESPACIOS_PUNTOS,
+        type: 'circle',
+        source: 'fuente-espacios-puntos',
+        filter: ['!', ['has', 'point_count']],
+        layout: { visibility: 'none' },
+        paint: {
+            'circle-color': [
+                'match',
+                ['get', 'Estrategia'],
+                'Territorios de Paz', '#238B45',
+                'Plan Michoacán', '#FF8C00',
+                'Plan Michoacán | Territorios de paz', '#7A0177',
+                '#7A0177'
+            ],
+            'circle-radius': 5,
+            'circle-opacity': 0.9,
+            'circle-stroke-color': '#FFFFFF',
+            'circle-stroke-width': 1.2
+        }
     });
 
     map.addSource('fuente-incidencia-delictiva', {
@@ -1875,7 +2096,7 @@ map.on('load', () => {
     });
 
     map.on('mousemove', ID_CAPA_ESPACIOS, (e) => {
-        if (modoMedicion || !espaciosVisible || !popupEspaciosHover || !e.features?.length) return;
+        if (modoMedicion || !espaciosVisible || modoEspaciosActual !== 'acumulado' || !popupEspaciosHover || !e.features?.length) return;
 
         const propiedades = e.features[0].properties || {};
         const valorEspacios = propiedades[PROP_ESPACIOS];
@@ -1901,6 +2122,67 @@ map.on('load', () => {
     map.on('mouseleave', ID_CAPA_ESPACIOS, () => {
         if (popupEspaciosHover) popupEspaciosHover.remove();
         map.getCanvas().style.cursor = '';
+    });
+
+    map.on('click', ID_CAPA_ESPACIOS_PUNTOS_CLUSTER, (e) => {
+        if (modoMedicion || !espaciosVisible || modoEspaciosActual !== 'puntos' || !e.features?.length) return;
+        const feature = e.features[0];
+        const clusterId = feature.properties?.cluster_id;
+        const source = map.getSource('fuente-espacios-puntos');
+        if (clusterId === undefined || !source) return;
+
+        source.getClusterExpansionZoom(clusterId, (error, zoom) => {
+            if (error) {
+                console.error('Error expandiendo grupo de espacios culturales:', error);
+                return;
+            }
+            map.easeTo({ center: feature.geometry.coordinates, zoom });
+        });
+    });
+
+    map.on('click', ID_CAPA_ESPACIOS_PUNTOS, (e) => {
+        if (modoMedicion || !espaciosVisible || modoEspaciosActual !== 'puntos' || !e.features?.length) return;
+        const properties = e.features[0].properties || {};
+        const generarFila = (etiqueta, valor) => {
+            const valorSeguro = escapeHTML(valor);
+            if (!valorSeguro) return '';
+            return `
+                <div style="margin-bottom:4px; line-height:1.4;">
+                    <span style="color:#999; font-weight:400;">${escapeHTML(etiqueta)}:</span>
+                    <span style="color:#000; font-weight:500;">${valorSeguro}</span>
+                </div>
+            `;
+        };
+
+        const titulo = escapeHTML(properties.nombre || 'Espacio cultural');
+        const contenido = `
+            <div style="font-family:'Noto Sans',sans-serif; min-width:240px; padding:5px 0;">
+                <div style="color:#7A0177; font-size:11px; font-weight:700; margin-bottom:4px;">
+                    ${escapeHTML(properties.Tipo || 'Espacio cultural')}
+                </div>
+                <h3 style="margin:0 0 10px 0; color:#000; font-size:1.17em; line-height:1.2;">${titulo}</h3>
+                ${generarFila('Estrategia', properties.Estrategia)}
+                ${generarFila('Estado', properties.nom_ent)}
+                ${generarFila('Municipio', properties.nom_mun)}
+                ${generarFila('Localidad', properties.nom_loc)}
+                ${generarFila('Adscripción', properties.adscripcion)}
+                ${generarFila('Dirección', properties.calle_numero)}
+            </div>
+        `;
+
+        new mapboxgl.Popup({ maxWidth: '320px' })
+            .setLngLat(e.lngLat)
+            .setHTML(contenido)
+            .addTo(map);
+    });
+
+    [ID_CAPA_ESPACIOS_PUNTOS_CLUSTER, ID_CAPA_ESPACIOS_PUNTOS].forEach(layerId => {
+        map.on('mouseenter', layerId, () => {
+            if (espaciosVisible && modoEspaciosActual === 'puntos') map.getCanvas().style.cursor = 'pointer';
+        });
+        map.on('mouseleave', layerId, () => {
+            map.getCanvas().style.cursor = '';
+        });
     });
 
     map.on('mousemove', ID_CAPA_DELITOS, (e) => {
@@ -2142,12 +2424,14 @@ function aplicarEscalaIndigena(nombreEstado) {
 }
 
 function aplicarEscalaEspacios(nombreEstado) {
-    if (!datosEspaciosLimpios || !map.getLayer(ID_CAPA_ESPACIOS)) return;
-    if (!espaciosVisible) {
+    if (!map.getLayer(ID_CAPA_ESPACIOS)) return;
+    aplicarVisibilidadEspaciosPuntos();
+    if (!espaciosVisible || modoEspaciosActual !== 'acumulado') {
         map.setLayoutProperty(ID_CAPA_ESPACIOS, 'visibility', 'none');
         if (popupEspaciosHover) popupEspaciosHover.remove();
         return;
     }
+    if (!datosEspaciosLimpios) return;
 
     map.setLayoutProperty(ID_CAPA_ESPACIOS, 'visibility', 'visible');
 
@@ -2477,6 +2761,7 @@ window.manejarCambioMunicipio = function (municipio) {
     });
     document.querySelectorAll('.custom-dropdown-list').forEach(l => l.classList.remove('open'));
     aplicarFiltros();
+    actualizarDatosEspaciosPuntosFiltrados();
 
     // 2. FlyTo Logic
     if (municipio === 'Todos los municipios') {
@@ -2494,11 +2779,14 @@ window.manejarCambioMunicipio = function (municipio) {
     }
 
     // Check data and calculate bounding box
-    const puntosMunicipio = datosOriginales.filter(f =>
-        f.properties.Municipio === municipio &&
-        f.properties.Estado === filtroEstadoActual &&
-        f.geometry && f.geometry.coordinates
-    );
+    const usarEspaciosPuntos = espaciosVisible && modoEspaciosActual === 'puntos' && !!datosEspaciosPuntos;
+    const puntosMunicipio = (usarEspaciosPuntos ? datosEspaciosPuntos.features : datosOriginales).filter(f => {
+        const properties = f.properties || {};
+        const coincideMunicipio = usarEspaciosPuntos
+            ? properties.nom_mun === municipio && properties.nom_ent === filtroEstadoActual
+            : properties.Municipio === municipio && properties.Estado === filtroEstadoActual;
+        return coincideMunicipio && f.geometry?.coordinates;
+    });
 
     if (puntosMunicipio.length > 0) {
         const bounds = new mapboxgl.LngLatBounds();
@@ -2576,6 +2864,7 @@ window.manejarCambioEstado = function (estado) {
     aplicarEscalaDensidad(estado);
     aplicarEscalaIndigena(estado);
     aplicarEscalaEspacios(estado);
+    actualizarDatosEspaciosPuntosFiltrados();
     aplicarEscalaDelitos(estado);
     aplicarEscalaNineces(estado);
     aplicarFiltros();
@@ -2802,7 +3091,7 @@ window.manejarSwitchEspacios = function (v) {
         if (planesVisible) { planesVisible = false; toggleChecks('planes', false); manejarSwitchPlanes(false); }
     }
     actualizarVisibilidadLeyendaDemografica();
-    sincronizarCargaCapaSociodemografica('espacios', v);
+    sincronizarCargaEspaciosActiva();
 }
 
 window.manejarSwitchDelitos = function (v) {
@@ -2895,11 +3184,13 @@ function toggleChecks(tipo, estado) {
 }
 
 function hayCapaDemograficaActivaParaLeyenda() {
-    return densidadVisible || indigenaVisible || espaciosVisible || delitosVisible || ninecesVisible;
+    const espaciosAcumuladosVisibles = espaciosVisible && modoEspaciosActual === 'acumulado';
+    return densidadVisible || indigenaVisible || espaciosAcumuladosVisibles || delitosVisible || ninecesVisible;
 }
 
 function actualizarVisibilidadLeyendaDemografica() {
     toggleLegend(hayCapaDemograficaActivaParaLeyenda());
+    actualizarVisibilidadSelectorModoEspacios();
     actualizarVisibilidadSelectorModoDelitos();
     actualizarVisibilidadSelectorModoNineces();
 }
@@ -2935,6 +3226,7 @@ window.resetearFiltros = function () {
     document.querySelectorAll('.estatus-btn[data-estatus]').forEach(b => {
         b.classList.toggle('active', b.dataset.estatus === 'Activo');
     });
+    actualizarBotonesModoEspacios();
     actualizarBotonesModoDelitos();
     manejarSwitchPromotorias(false);
     manejarSwitchTerritoriosPaz(false);
@@ -3177,7 +3469,28 @@ function crearLeyenda() {
     body.appendChild(ninecesModo);
 
     addSw('indigena-switch', '% de población indígena', 'manejarSwitchIndigena(this.checked)', 'indigena');
-    addSw('espacios-switch', 'Núm. de espacios culturales por municipio', 'manejarSwitchEspacios(this.checked)', 'espacios');
+    addSw('espacios-switch', 'Espacios culturales', 'manejarSwitchEspacios(this.checked)', 'espacios');
+
+    const espaciosModo = document.createElement('div');
+    espaciosModo.id = 'espacios-mode-container';
+    espaciosModo.className = 'switch-container delitos-mode-container espacios-mode-container';
+    espaciosModo.style.display = 'none';
+    espaciosModo.innerHTML = `
+        <div class="delitos-mode-title">Visualizar espacios como:</div>
+        <div class="estatus-segmented delitos-mode-segmented espacios-mode-segmented">
+            <button id="espacios-mode-acumulado" class="estatus-btn active" onclick="manejarCambioModoEspacios('acumulado')">Acumulado por municipio</button>
+            <button id="espacios-mode-puntos" class="estatus-btn" onclick="manejarCambioModoEspacios('puntos')">Puntos en TP - PM</button>
+        </div>
+        <span class="layer-load-status espacios-puntos-load-status" data-layer-status="espacios-puntos" data-state="idle" role="status" aria-live="polite"></span>
+        <div id="espacios-puntos-legend" class="espacios-puntos-legend">
+            <span><i class="espacios-point-key is-tp"></i>Territorios de Paz</span>
+            <span><i class="espacios-point-key is-pm"></i>Plan Michoacán</span>
+            <span><i class="espacios-point-key is-both"></i>Ambos</span>
+            <em>Fuente: SIC - SC</em>
+        </div>
+    `;
+    body.appendChild(espaciosModo);
+
     addSw('delitos-switch', 'Incidencia delictiva <span style="font-size:10.5px; color:#888; font-weight:normal; margin-left:4px;">(Ene-Feb 2026)</span>', 'manejarSwitchDelitos(this.checked)', 'delitos');
 
     const delitosModo = document.createElement('div');
