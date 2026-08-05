@@ -1756,7 +1756,7 @@ map.on('load', () => {
                 25, 20,
                 100, 25
             ],
-            'circle-opacity': 0.88,
+            'circle-opacity': 0.72,
             'circle-stroke-color': '#FFFFFF',
             'circle-stroke-width': 1.2
         }
