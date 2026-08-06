@@ -375,12 +375,12 @@ body {
 }
 
 .promotorias-point-key {
-    width: 10px;
-    height: 10px;
-    flex: 0 0 10px;
+    width: 8px;
+    height: 8px;
+    flex: 0 0 8px;
     box-sizing: border-box;
     background: #FF8C00;
-    border: 1.5px solid #FFFFFF;
+    border: 1px solid #FFFFFF;
     border-radius: 50%;
     box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2);
 }

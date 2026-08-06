@@ -49,6 +49,7 @@ const PROP_NINECES_12_17 = '12_A_17';
 const PROP_NINECES_18_29 = '18_A_29';
 let modoNinecesActual = '3_11';
 const PROP_ACCIONES = 'Acciones';
+const PROP_CEDULAS_APLICADAS = 'Cédulas aplicadas';
 const ICONO_PROGRAMA_DEFAULT = 'programa-default';
 const PROGRAMA_SEMILLEROS_CREATIVOS_PAZ = 'Semilleros creativos de paz';
 
@@ -1985,15 +1986,18 @@ map.on('load', () => {
             'circle-radius': [
                 'interpolate',
                 ['linear'],
-                ['zoom'],
-                4, 4,
-                8, 6,
-                12, 8
+                ['max', 0, ['to-number', ['get', PROP_CEDULAS_APLICADAS], 0]],
+                0, 2.2,
+                10, 2.6,
+                25, 3.1,
+                50, 3.7,
+                100, 4.4,
+                250, 5.2
             ],
             'circle-color': '#FF8C00',
             'circle-opacity': 0.95,
             'circle-stroke-color': '#FFFFFF',
-            'circle-stroke-width': 1.5
+            'circle-stroke-width': 1
         }
     });
 
@@ -2116,7 +2120,7 @@ map.on('load', () => {
                 ${generarFila('Sede', propiedades.Sedes)}
                 ${generarFila('Estatus', propiedades.Estatus)}
                 ${generarFila('AGEB', propiedades.Ageb)}
-                ${generarFila('Cédulas aplicadas', propiedades['Cédulas aplicadas'])}
+                ${generarFila('Cédulas aplicadas', propiedades[PROP_CEDULAS_APLICADAS])}
             </div>
         `;
 
