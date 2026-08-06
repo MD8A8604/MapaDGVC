@@ -432,6 +432,8 @@ function obtenerBoundsEstado(nombreEstado) {
 }
 
 function obtenerResumenPuntosParaZoom(estado = filtroEstadoActual, municipio = 'Todos los municipios') {
+    if (promotoriasVisible && filtrosProgramasActivos.length === 0) return null;
+
     const puntos = datosOriginales.filter(feature => {
         const props = feature?.properties || {};
         const coords = feature?.geometry?.coordinates;
@@ -1644,6 +1646,7 @@ function cargarPromotorias() {
         toggleChecks('promotorias', false);
         actualizarEstadoVisualCarga('promotorias');
         aplicarVisibilidadPromotorias();
+        aplicarFiltros();
         console.error('Error cargando Promotorías:', error);
         return false;
     });
@@ -1952,7 +1955,7 @@ map.on('load', () => {
         layout: { visibility: 'none' },
         paint: {
             'fill-color': '#2389B9',
-            'fill-opacity': 0.22
+            'fill-opacity': 0.06
         }
     }, 'puntos-geojson');
     map.addLayer({
@@ -1970,7 +1973,7 @@ map.on('load', () => {
                 8, 0.6,
                 12, 1.1
             ],
-            'line-opacity': 0.8
+            'line-opacity': 0.22
         }
     }, 'puntos-geojson');
     map.addLayer({
@@ -2914,7 +2917,9 @@ function aplicarFiltros() {
         f.push(['==', ['get', 'Estado'], filtroEstadoActual]);
     }
 
-    if (filtrosProgramasActivos.length > 0) {
+    if (promotoriasVisible && filtrosProgramasActivos.length === 0) {
+        f.push(['==', 1, 0]);
+    } else if (filtrosProgramasActivos.length > 0) {
         const matchProgramas = ['any', ...filtrosProgramasActivos.map(p => ['==', ['get', 'Programa'], p])];
         f.push(matchProgramas);
     }
@@ -2956,10 +2961,13 @@ function aplicarEstiloItemLeyenda(item, { activo, parcial = false, color }) {
 }
 
 function actualizarEstilosVisuales() {
+    const programasPrincipalesOcultos = promotoriasVisible && filtrosProgramasActivos.length === 0;
+
     document.querySelectorAll('.legend-item[data-program], .mobile-legend-item[data-program]').forEach(item => {
         const n = item.querySelector('.program-name')?.textContent.trim();
         const programaNombre = item.dataset.program || n;
-        const activo = filtrosProgramasActivos.length === 0 || filtrosProgramasActivos.includes(programaNombre);
+        const activo = !programasPrincipalesOcultos
+            && (filtrosProgramasActivos.length === 0 || filtrosProgramasActivos.includes(programaNombre));
         const programa = obtenerPrograma(programaNombre);
         const color = programa?.color || '#999';
         aplicarEstiloItemLeyenda(item, { activo, color });
@@ -2968,7 +2976,8 @@ function actualizarEstilosVisuales() {
     document.querySelectorAll(`.legend-group-item[data-group-id="${GRUPO_SEMILLEROS.id}"]`).forEach(item => {
         const programasGrupo = GRUPO_SEMILLEROS.programas;
         const activosGrupo = programasGrupo.filter(p => filtrosProgramasActivos.includes(p)).length;
-        const activo = filtrosProgramasActivos.length === 0 || activosGrupo === programasGrupo.length;
+        const activo = !programasPrincipalesOcultos
+            && (filtrosProgramasActivos.length === 0 || activosGrupo === programasGrupo.length);
         const parcial = filtrosProgramasActivos.length > 0 && activosGrupo > 0 && activosGrupo < programasGrupo.length;
         aplicarEstiloItemLeyenda(item, { activo, parcial, color: GRUPO_SEMILLEROS.color });
     });
@@ -3052,8 +3061,10 @@ window.manejarFiltroGrupoSemilleros = function () {
 
 window.manejarSwitchPromotorias = function (v) {
     promotoriasVisible = v;
+    if (v) filtrosProgramasActivos = [];
     toggleChecks('promotorias', v);
     aplicarVisibilidadPromotorias();
+    aplicarFiltros();
 
     if (v) cargarPromotorias();
 }
