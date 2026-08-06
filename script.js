@@ -1987,12 +1987,12 @@ map.on('load', () => {
                 'interpolate',
                 ['linear'],
                 ['max', 0, ['to-number', ['get', PROP_CEDULAS_APLICADAS], 0]],
-                0, 2.2,
-                10, 2.6,
-                25, 3.1,
-                50, 3.7,
-                100, 4.4,
-                250, 5.2
+                0, 3,
+                10, 3.6,
+                25, 4.3,
+                50, 5.1,
+                100, 6,
+                250, 7
             ],
             'circle-color': '#FF8C00',
             'circle-opacity': 0.95,
