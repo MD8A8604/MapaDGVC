@@ -2910,6 +2910,8 @@ window.manejarCambioEstado = function (estado) {
 
 function aplicarFiltros() {
     let f = ['all'];
+    const ocultarPuntosPrincipales = promotoriasVisible && filtrosProgramasActivos.length === 0;
+
     if (filtroEstatus !== 'Todos') {
         f.push(['==', ['get', 'Estatus'], filtroEstatus]);
     }
@@ -2917,9 +2919,7 @@ function aplicarFiltros() {
         f.push(['==', ['get', 'Estado'], filtroEstadoActual]);
     }
 
-    if (promotoriasVisible && filtrosProgramasActivos.length === 0) {
-        f.push(['==', 1, 0]);
-    } else if (filtrosProgramasActivos.length > 0) {
+    if (filtrosProgramasActivos.length > 0) {
         const matchProgramas = ['any', ...filtrosProgramasActivos.map(p => ['==', ['get', 'Programa'], p])];
         f.push(matchProgramas);
     }
@@ -2937,6 +2937,7 @@ function aplicarFiltros() {
 
     if (map.getLayer('puntos-geojson')) {
         map.setFilter('puntos-geojson', f.length > 1 ? f : null);
+        map.setLayoutProperty('puntos-geojson', 'visibility', ocultarPuntosPrincipales ? 'none' : 'visible');
     }
 
     actualizarContadores();
