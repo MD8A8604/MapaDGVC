@@ -50,9 +50,16 @@ const PROP_NINECES_18_29 = '18_A_29';
 let modoNinecesActual = '3_11';
 const PROP_ACCIONES = 'Acciones';
 const ICONO_PROGRAMA_DEFAULT = 'programa-default';
+const PROGRAMA_SEMILLEROS_CREATIVOS_PAZ = 'Semilleros creativos de paz';
+
+const ALIASES_PROGRAMAS = new Map([
+    ['semilleros creativos', PROGRAMA_SEMILLEROS_CREATIVOS_PAZ],
+    ['semilleros creativos dgvc', PROGRAMA_SEMILLEROS_CREATIVOS_PAZ],
+    ['semilleros creativos de paz', PROGRAMA_SEMILLEROS_CREATIVOS_PAZ]
+]);
 
 const programasOriginales = [
-    { nombre: 'Semilleros Creativos', etiquetaLeyenda: 'DGVC', color: '#7A5AA6', categoria: 'Actividades de formación', forma: 'circle', icono: 'programa-semilleros-creativos', cantidad: 0 },
+    { nombre: PROGRAMA_SEMILLEROS_CREATIVOS_PAZ, etiquetaLeyenda: 'Creativos de paz', color: '#7A5AA6', categoria: 'Actividades de formación', forma: 'circle', icono: 'programa-semilleros-creativos', cantidad: 0 },
     { nombre: 'Semilleros de Paz', etiquetaLeyenda: 'Paz', color: '#A66A5B', categoria: 'Actividades de formación', forma: 'circle', icono: 'programa-semilleros-paz', cantidad: 0 },
     { nombre: 'Semilleros de Música', etiquetaLeyenda: 'Música', color: '#3B6C8F', categoria: 'Actividades de formación', forma: 'circle', icono: 'programa-semilleros-musica', cantidad: 0 },
     { nombre: 'Semilleros Creativos INPI', etiquetaLeyenda: 'INPI', color: '#A57F2C', categoria: 'Actividades de formación', forma: 'circle', icono: 'programa-semilleros-inpi', cantidad: 0 },
@@ -63,11 +70,11 @@ const programasOriginales = [
 
 const GRUPO_SEMILLEROS = {
     id: 'semilleros-creativos',
-    nombre: 'Semilleros Creativos',
+    nombre: PROGRAMA_SEMILLEROS_CREATIVOS_PAZ,
     color: '#7A5AA6',
     forma: 'circle',
     categoria: 'Actividades de formación',
-    programas: ['Semilleros Creativos', 'Semilleros de Música', 'Semilleros de Paz', 'Semilleros Creativos INPI']
+    programas: [PROGRAMA_SEMILLEROS_CREATIVOS_PAZ, 'Semilleros de Música', 'Semilleros de Paz', 'Semilleros Creativos INPI']
 };
 
 let gruposLeyendaExpandidos = {
@@ -171,6 +178,17 @@ function normalizarTexto(valor) {
     const texto = String(valor).trim();
     if (!texto || texto.toLowerCase() === 'null' || texto.toLowerCase() === 'undefined') return '';
     return texto;
+}
+
+function normalizarPrograma(valor) {
+    const programa = normalizarTexto(valor);
+    const clave = programa
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, ' ')
+        .toLowerCase();
+
+    return ALIASES_PROGRAMAS.get(clave) || programa;
 }
 
 function escapeHTML(valor) {
@@ -1192,7 +1210,10 @@ async function fetchCSVAsGeoJSON(url, { dynamicTyping = true } = {}) {
                                 type: 'Point',
                                 coordinates: [parseFloat(row.Longitud), parseFloat(row.Latitud)]
                             },
-                            properties: row
+                            properties: {
+                                ...row,
+                                Programa: normalizarPrograma(row.Programa)
+                            }
                         }));
 
                     resolve({
@@ -3380,7 +3401,7 @@ function crearLeyenda() {
             type="button"
             class="legend-group-toggle"
             data-group-id="${GRUPO_SEMILLEROS.id}"
-            aria-label="Mostrar desglose de Semilleros Creativos"
+            aria-label="Mostrar desglose de Semilleros creativos de paz"
             aria-expanded="false"
             onclick="event.stopPropagation(); toggleGrupoLeyenda('${GRUPO_SEMILLEROS.id}');"
         >+</button>
