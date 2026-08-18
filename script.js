@@ -607,6 +607,25 @@ const estadosMexico = [
     { nombre: 'Zacatecas', bbox: [[-104.41, 21.04], [-101.45, 25.14]] }
 ];
 
+const ALIASES_ESTADOS = new Map([
+    ['cdmx', 'Ciudad de México'],
+    ['distrito federal', 'Ciudad de México']
+]);
+
+function normalizarNombreEstado(valor) {
+    const estado = normalizarTexto(valor);
+    if (!estado) return '';
+
+    const clave = normalizarClaveGeografica(estado);
+    const alias = ALIASES_ESTADOS.get(clave);
+    if (alias) return alias;
+
+    const estadoCanonico = estadosMexico.find(
+        item => normalizarClaveGeografica(item.nombre) === clave
+    );
+    return estadoCanonico?.nombre || estado;
+}
+
 const map = new mapboxgl.Map({
     container: 'map',
     style: 'mapbox://styles/miguelochoa/cmq5ozdrp001w01qrgm54dge6',
@@ -1216,7 +1235,8 @@ async function fetchCSVAsGeoJSON(url, { dynamicTyping = true } = {}) {
                             },
                             properties: {
                                 ...row,
-                                Programa: normalizarPrograma(row.Programa)
+                                Programa: normalizarPrograma(row.Programa),
+                                Estado: normalizarNombreEstado(row.Estado)
                             }
                         }));
 
@@ -1478,6 +1498,7 @@ function normalizarClaveGeografica(valor) {
     return normalizarTexto(valor)
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, ' ')
         .toLowerCase();
 }
 
