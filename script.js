@@ -2822,13 +2822,14 @@ window.manejarCambioMunicipio = function (municipio) {
 
     // Check data and calculate bounding box
     const usarEspaciosPuntos = espaciosVisible && modoEspaciosActual === 'puntos' && !!datosEspaciosPuntos;
-    const puntosMunicipio = (usarEspaciosPuntos ? datosEspaciosPuntos.features : datosOriginales).filter(f => {
-        const properties = f.properties || {};
-        const coincideMunicipio = usarEspaciosPuntos
-            ? properties.nom_mun === municipio && properties.nom_ent === filtroEstadoActual
-            : properties.Municipio === municipio && properties.Estado === filtroEstadoActual;
-        return coincideMunicipio && f.geometry?.coordinates;
-    });
+    const puntosMunicipio = usarEspaciosPuntos
+        ? obtenerEspaciosPuntosFiltrados().features.filter(esPuntoGeoJSONValido)
+        : datosOriginales.filter(f => {
+            const properties = f.properties || {};
+            return properties.Municipio === municipio
+                && properties.Estado === filtroEstadoActual
+                && f.geometry?.coordinates;
+        });
 
     if (puntosMunicipio.length > 0) {
         const bounds = new mapboxgl.LngLatBounds();
