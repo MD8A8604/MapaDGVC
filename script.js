@@ -64,7 +64,7 @@ const programasOriginales = [
     { nombre: 'Semilleros de Paz', etiquetaLeyenda: 'Paz', color: '#A66A5B', categoria: 'Actividades de formación', forma: 'circle', icono: 'programa-semilleros-paz', cantidad: 0 },
     { nombre: 'Semilleros de Música', etiquetaLeyenda: 'Música', color: '#3B6C8F', categoria: 'Actividades de formación', forma: 'circle', icono: 'programa-semilleros-musica', cantidad: 0 },
     { nombre: 'Semilleros Creativos INPI', etiquetaLeyenda: 'INPI', color: '#A57F2C', categoria: 'Actividades de formación', forma: 'circle', icono: 'programa-semilleros-inpi', cantidad: 0 },
-    { nombre: 'Convite Cultural', color: '#9B2247', categoria: 'Actividades artísticas y culturales', forma: 'diamond', icono: 'programa-convites', cantidad: 0 },
+    { nombre: 'Convite Cultural', etiquetaLeyenda: 'Promotorías Cívico Culturales (CV)', color: '#9B2247', categoria: 'Actividades artísticas y culturales', forma: 'diamond', icono: 'programa-convites', cantidad: 0 },
     { nombre: 'Cine Sillita', color: '#B08D57', categoria: 'Actividades artísticas y culturales', forma: 'diamond', icono: 'programa-cine', cantidad: 0 },
     { nombre: 'PAICE', color: '#16A34A', categoria: 'Convocatorias', forma: 'square', icono: 'programa-paice', cantidad: 0 },
     { nombre: 'Economía creativa', color: '#D14D8B', categoria: 'Convocatorias', forma: 'square', icono: 'programa-economia-creativa', cantidad: 0 }
@@ -173,6 +173,11 @@ function crearExpresionIconoPrograma() {
 
 function obtenerPrograma(nombre) {
     return programasOriginales.find(programa => programa.nombre === nombre);
+}
+
+function obtenerEtiquetaPrograma(nombre) {
+    const programa = obtenerPrograma(nombre);
+    return programa?.etiquetaLeyenda || programa?.nombre || nombre;
 }
 
 function normalizarTexto(valor) {
@@ -2067,7 +2072,7 @@ map.on('load', () => {
 
         // 1. Definimos qué campo usar como "Nombre" principal. 
         // Usamos 'Nombre del semillero' como prioridad, si no existe, usamos 'Programa'.
-        const nombreTitulo = escapeHTML(p['Nombre'] || p.Programa || 'Sin nombre');
+        const nombreTitulo = escapeHTML(p['Nombre'] || obtenerEtiquetaPrograma(p.Programa) || 'Sin nombre');
 
         // 2. Función para generar las filas con el estilo solicitado:
         // Etiqueta en gris claro (#888) y Valor en negro (#000).
