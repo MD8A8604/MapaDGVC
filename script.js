@@ -3505,7 +3505,7 @@ function crearLeyenda() {
     `;
     body.appendChild(pazLegend);
 
-    addSw('promotorias-switch', 'Promotorías cívico culturales', 'manejarSwitchPromotorias(this.checked)', 'promotorias');
+    addSw('promotorias-switch', 'Promotorías Cívico Culturales (CV)', 'manejarSwitchPromotorias(this.checked)', 'promotorias');
 
     const promotoriasLegend = document.createElement('div');
     promotoriasLegend.id = 'promotorias-legend';
