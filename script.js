@@ -52,11 +52,15 @@ const PROP_ACCIONES = 'Acciones';
 const PROP_CEDULAS_APLICADAS = 'Cédulas aplicadas';
 const ICONO_PROGRAMA_DEFAULT = 'programa-default';
 const PROGRAMA_SEMILLEROS_CREATIVOS_PAZ = 'Semilleros creativos de paz';
+const PROGRAMA_PROMOTORIAS_CV = 'Promotorías Cívico Culturales (CV)';
 
 const ALIASES_PROGRAMAS = new Map([
     ['semilleros creativos', PROGRAMA_SEMILLEROS_CREATIVOS_PAZ],
     ['semilleros creativos dgvc', PROGRAMA_SEMILLEROS_CREATIVOS_PAZ],
-    ['semilleros creativos de paz', PROGRAMA_SEMILLEROS_CREATIVOS_PAZ]
+    ['semilleros creativos de paz', PROGRAMA_SEMILLEROS_CREATIVOS_PAZ],
+    ['convite cultural', PROGRAMA_PROMOTORIAS_CV],
+    ['convites culturales', PROGRAMA_PROMOTORIAS_CV],
+    ['promotorias civico culturales (cv)', PROGRAMA_PROMOTORIAS_CV]
 ]);
 
 const programasOriginales = [
@@ -64,7 +68,7 @@ const programasOriginales = [
     { nombre: 'Semilleros de Paz', etiquetaLeyenda: 'Paz', color: '#A66A5B', categoria: 'Actividades de formación', forma: 'circle', icono: 'programa-semilleros-paz', cantidad: 0 },
     { nombre: 'Semilleros de Música', etiquetaLeyenda: 'Música', color: '#3B6C8F', categoria: 'Actividades de formación', forma: 'circle', icono: 'programa-semilleros-musica', cantidad: 0 },
     { nombre: 'Semilleros Creativos INPI', etiquetaLeyenda: 'INPI', color: '#A57F2C', categoria: 'Actividades de formación', forma: 'circle', icono: 'programa-semilleros-inpi', cantidad: 0 },
-    { nombre: 'Convite Cultural', etiquetaLeyenda: 'Promotorías Cívico Culturales (CV)', color: '#9B2247', categoria: 'Actividades artísticas y culturales', forma: 'diamond', icono: 'programa-convites', cantidad: 0 },
+    { nombre: PROGRAMA_PROMOTORIAS_CV, color: '#9B2247', categoria: 'Actividades artísticas y culturales', forma: 'diamond', icono: 'programa-convites', cantidad: 0 },
     { nombre: 'Cine Sillita', color: '#B08D57', categoria: 'Actividades artísticas y culturales', forma: 'diamond', icono: 'programa-cine', cantidad: 0 },
     { nombre: 'PAICE', color: '#16A34A', categoria: 'Convocatorias', forma: 'square', icono: 'programa-paice', cantidad: 0 },
     { nombre: 'Economía creativa', color: '#D14D8B', categoria: 'Convocatorias', forma: 'square', icono: 'programa-economia-creativa', cantidad: 0 }
@@ -3505,7 +3509,7 @@ function crearLeyenda() {
     `;
     body.appendChild(pazLegend);
 
-    addSw('promotorias-switch', 'Promotorías Cívico Culturales (CV)', 'manejarSwitchPromotorias(this.checked)', 'promotorias');
+    addSw('promotorias-switch', 'Promotorías cívico culturales', 'manejarSwitchPromotorias(this.checked)', 'promotorias');
 
     const promotoriasLegend = document.createElement('div');
     promotoriasLegend.id = 'promotorias-legend';
