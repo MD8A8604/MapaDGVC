@@ -60,7 +60,8 @@ const ALIASES_PROGRAMAS = new Map([
     ['semilleros creativos de paz', PROGRAMA_SEMILLEROS_CREATIVOS_PAZ],
     ['convite cultural', PROGRAMA_PROMOTORIAS_CV],
     ['convites culturales', PROGRAMA_PROMOTORIAS_CV],
-    ['promotorias civico culturales (cv)', PROGRAMA_PROMOTORIAS_CV]
+    ['promotorias civico culturales (cv)', PROGRAMA_PROMOTORIAS_CV],
+    ['recreo', 'reCreo']
 ]);
 
 const programasOriginales = [
@@ -71,7 +72,8 @@ const programasOriginales = [
     { nombre: PROGRAMA_PROMOTORIAS_CV, color: '#9B2247', categoria: 'Actividades artísticas y culturales', forma: 'diamond', icono: 'programa-convites', cantidad: 0 },
     { nombre: 'Cine Sillita', color: '#B08D57', categoria: 'Actividades artísticas y culturales', forma: 'diamond', icono: 'programa-cine', cantidad: 0 },
     { nombre: 'PAICE', color: '#16A34A', categoria: 'Convocatorias', forma: 'square', icono: 'programa-paice', cantidad: 0 },
-    { nombre: 'Economía creativa', color: '#D14D8B', categoria: 'Convocatorias', forma: 'square', icono: 'programa-economia-creativa', cantidad: 0 }
+    { nombre: 'Economía creativa', color: '#D14D8B', categoria: 'Convocatorias', forma: 'square', icono: 'programa-economia-creativa', cantidad: 0 },
+    { nombre: 'reCreo', color: '#2E7D32', categoria: 'Actividades artísticas y culturales', forma: 'circle', icono: 'programa-recreo', cantidad: 0 }
 ];
 
 const GRUPO_SEMILLEROS = {
