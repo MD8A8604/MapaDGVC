@@ -2039,8 +2039,17 @@ map.on('load', () => {
         source: 'fuente-promotorias-agebs',
         layout: { visibility: 'none' },
         paint: {
-            'fill-color': '#146B87',
-            'fill-opacity': 0.50
+            'fill-color': [
+                'step',
+                ['to-number', ['get', PROP_CEDULAS_APLICADAS], 0],
+                '#D4EEF7',
+                11, '#87CEEB',
+                26, '#36A2C9',
+                51, '#146B87',
+                101, '#0E4B5E',
+                251, '#062732'
+            ],
+            'fill-opacity': 0.65
         }
     }, 'puntos-geojson');
     map.addLayer({
@@ -3570,12 +3579,37 @@ function crearLeyenda() {
     promotoriasLegend.style.display = 'none';
     promotoriasLegend.innerHTML = `
         <div class="strategy-layer-legend-row">
-            <span class="promotorias-ageb-key" aria-hidden="true" style="background-color:#146B87; border: 1px solid #0B3B4B;"></span>
-            <span>AGEBs con cédulas aplicadas</span>
+
+            <span style="font-weight:600; color:#555;">Cédulas aplicadas por AGEB</span>
         </div>
         <div class="strategy-layer-legend-row">
-            <span class="promotorias-point-key" aria-hidden="true"></span>
-            <span>Cédulas registradas</span>
+
+            <div style="display:flex; flex-direction:column; gap:3px; font-size:11px; color:#444; margin-top:4px;">
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <span style="width:14px; height:14px; background-color:#D4EEF7; border:1px solid #B0D7E5; border-radius:2px; display:inline-block;"></span>
+                    <span>1 – 10 cédulas</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <span style="width:14px; height:14px; background-color:#87CEEB; border:1px solid #6BAFCB; border-radius:2px; display:inline-block;"></span>
+                    <span>11 – 25 cédulas</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <span style="width:14px; height:14px; background-color:#36A2C9; border:1px solid #2385A6; border-radius:2px; display:inline-block;"></span>
+                    <span>26 – 50 cédulas</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <span style="width:14px; height:14px; background-color:#146B87; border:1px solid #0E4B5E; border-radius:2px; display:inline-block;"></span>
+                    <span>51 – 100 cédulas</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <span style="width:14px; height:14px; background-color:#0E4B5E; border:1px solid #08323F; border-radius:2px; display:inline-block;"></span>
+                    <span>101 – 250 cédulas</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <span style="width:14px; height:14px; background-color:#062732; border:1px solid #03151B; border-radius:2px; display:inline-block;"></span>
+                    <span>Más de 250 cédulas</span>
+                </div>
+            </div>
         </div>
     `;
     body.appendChild(promotoriasLegend);
