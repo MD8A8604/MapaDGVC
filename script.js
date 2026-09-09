@@ -1662,8 +1662,59 @@ function cargarPromotorias() {
             throw new Error('No se encontraron las fuentes de Promotorías.');
         }
 
-        sourceAgebs.setData(agebs);
-        sourceEncuestas.setData(encuestas);
+        // 1. Agrupar encuestas y sumar cédulas por clave de AGEB
+        const datosPorAgeb = new Map();
+        encuestas.features.forEach(f => {
+            const props = f.properties || {};
+            const claveRaw = props.ageb || props.Ageb || props.AGEB || props.CVE_AGEB_COMPLETA || props.cve_ageb_completa || props.CVEGEO || '';
+            const clave = String(claveRaw).trim();
+            if (!clave) return;
+
+            const cedulas = parseValorNumerico(props[PROP_CEDULAS_APLICADAS] || props['Cedulas aplicadas'] || props.cedulas || 1, 1);
+            if (!datosPorAgeb.has(clave)) {
+                datosPorAgeb.set(clave, {
+                    totalCedulas: 0,
+                    countEncuestas: 0,
+                    estado: props.Estado || '',
+                    municipio: props.Municipio || '',
+                    localidad: props.Localidad || '',
+                    sedes: props.Sedes || '',
+                    actividad: props.Actividad || props.Proyecto || ''
+                });
+            }
+
+            const info = datosPorAgeb.get(clave);
+            info.totalCedulas += cedulas;
+            info.countEncuestas += 1;
+            if (!info.estado && props.Estado) info.estado = props.Estado;
+            if (!info.municipio && props.Municipio) info.municipio = props.Municipio;
+            if (!info.localidad && props.Localidad) info.localidad = props.Localidad;
+        });
+
+        // 2. Cruzar con las AGEBs del GeoJSON y conservar únicamente las que contienen encuestas/cédulas
+        const agebsConDatos = agebs.features.filter(f => {
+            if (!f || !f.properties) return false;
+            const props = f.properties;
+            const claveGeo = String(props.CVE_AGEB_COMPLETA || props.CVEGEO || props.cve_ageb_completa || props.cvegeo || props.CVE_AGEB || '').trim();
+            const claveGeoLimpia = claveGeo.replace(/^0+/, '');
+
+            const info = datosPorAgeb.get(claveGeo) || datosPorAgeb.get(claveGeoLimpia);
+            if (info && info.totalCedulas > 0) {
+                props[PROP_CEDULAS_APLICADAS] = info.totalCedulas;
+                props.count_encuestas = info.countEncuestas;
+                props.Estado = info.estado || props.Estado || props.nom_ent || '';
+                props.Municipio = info.municipio || props.Municipio || props.nom_mun || '';
+                props.Localidad = info.localidad || props.Localidad || props.nom_loc || '';
+                props.Sedes = info.sedes || props.Sedes || '';
+                props.Actividad = info.actividad || props.Actividad || '';
+                props.CVE_AGEB_COMPLETA = claveGeo;
+                return true;
+            }
+            return false;
+        });
+
+        sourceAgebs.setData({ type: 'FeatureCollection', features: agebsConDatos });
+        sourceEncuestas.setData({ type: 'FeatureCollection', features: [] });
 
         carga.estado = 'ready';
         carga.error = null;
@@ -1988,8 +2039,8 @@ map.on('load', () => {
         source: 'fuente-promotorias-agebs',
         layout: { visibility: 'none' },
         paint: {
-            'fill-color': '#2389B9',
-            'fill-opacity': 0.06
+            'fill-color': '#146B87',
+            'fill-opacity': 0.50
         }
     }, 'puntos-geojson');
     map.addLayer({
@@ -1998,7 +2049,7 @@ map.on('load', () => {
         source: 'fuente-promotorias-agebs',
         layout: { visibility: 'none' },
         paint: {
-            'line-color': '#146B87',
+            'line-color': '#0B3B4B',
             'line-width': [
                 'interpolate',
                 ['linear'],
@@ -2007,7 +2058,7 @@ map.on('load', () => {
                 8, 0.6,
                 12, 1.1
             ],
-            'line-opacity': 0.22
+            'line-opacity': 0.90
         }
     }, 'puntos-geojson');
     map.addLayer({
@@ -2124,7 +2175,7 @@ map.on('load', () => {
     map.on('mouseenter', 'puntos-geojson', () => map.getCanvas().style.cursor = 'pointer');
     map.on('mouseleave', 'puntos-geojson', () => map.getCanvas().style.cursor = '');
 
-    map.on('click', ID_CAPA_PROMOTORIAS_ENCUESTAS, (e) => {
+    map.on('click', ID_CAPA_PROMOTORIAS_AGEBS, (e) => {
         if (modoMedicion || !promotoriasVisible || !e.features?.length) return;
         const propiedades = e.features[0].properties || {};
         const generarFila = (etiqueta, valor) => {
@@ -2152,7 +2203,7 @@ map.on('load', () => {
                 ${generarFila('Localidad', propiedades.Localidad)}
                 ${generarFila('Sede', propiedades.Sedes)}
                 ${generarFila('Estatus', propiedades.Estatus)}
-                ${generarFila('AGEB', propiedades.Ageb)}
+                ${generarFila('AGEB', propiedades.CVE_AGEB_COMPLETA || propiedades.Ageb)}
                 ${generarFila('Cédulas aplicadas', propiedades[PROP_CEDULAS_APLICADAS])}
             </div>
         `;
@@ -2163,10 +2214,10 @@ map.on('load', () => {
             .addTo(map);
     });
 
-    map.on('mouseenter', ID_CAPA_PROMOTORIAS_ENCUESTAS, () => {
+    map.on('mouseenter', ID_CAPA_PROMOTORIAS_AGEBS, () => {
         if (promotoriasVisible) map.getCanvas().style.cursor = 'pointer';
     });
-    map.on('mouseleave', ID_CAPA_PROMOTORIAS_ENCUESTAS, () => {
+    map.on('mouseleave', ID_CAPA_PROMOTORIAS_AGEBS, () => {
         map.getCanvas().style.cursor = '';
     });
 
@@ -3519,12 +3570,12 @@ function crearLeyenda() {
     promotoriasLegend.style.display = 'none';
     promotoriasLegend.innerHTML = `
         <div class="strategy-layer-legend-row">
-            <span class="promotorias-ageb-key" aria-hidden="true"></span>
-            <span>AGEBS de Territorios de Paz</span>
+            <span class="promotorias-ageb-key" aria-hidden="true" style="background-color:#146B87; border: 1px solid #0B3B4B;"></span>
+            <span>AGEBs con cédulas aplicadas</span>
         </div>
         <div class="strategy-layer-legend-row">
             <span class="promotorias-point-key" aria-hidden="true"></span>
-            <span>Aplicación de encuestas</span>
+            <span>Cédulas registradas</span>
         </div>
     `;
     body.appendChild(promotoriasLegend);
