@@ -1,7 +1,13 @@
 // --- CONFIGURACIÓN ---
-mapboxgl.accessToken = window.MAPBOX_ACCESS_TOKEN || '';
-if (!mapboxgl.accessToken) {
-    throw new Error('Falta configurar MAPBOX_ACCESS_TOKEN en config.js o en Netlify.');
+const MAPTILER_API_KEY = String(window.MAPTILER_API_KEY || '').trim();
+const MAPBOX_ACCESS_TOKEN = String(window.MAPBOX_ACCESS_TOKEN || '').trim();
+
+if (!MAPTILER_API_KEY) {
+    throw new Error('Falta configurar MAPTILER_API_KEY en config.js o en Netlify.');
+}
+
+if (!MAPBOX_ACCESS_TOKEN) {
+    console.warn('MAPBOX_ACCESS_TOKEN no está configurado: las rutas estarán deshabilitadas temporalmente.');
 }
 
 // --- CONSTANTES ---
@@ -436,7 +442,7 @@ function obtenerBoundsEstado(nombreEstado) {
 
     const geometriaPrincipal = obtenerGeometriaPrincipalEstado(featureEstado?.geometry);
     if (geometriaPrincipal) {
-        const bounds = new mapboxgl.LngLatBounds();
+        const bounds = new maplibregl.LngLatBounds();
         extenderBoundsConCoordenadas(bounds, geometriaPrincipal);
         if (!bounds.isEmpty()) return bounds;
     }
@@ -464,7 +470,7 @@ function obtenerResumenPuntosParaZoom(estado = filtroEstadoActual, municipio = '
 
     if (!puntos.length) return null;
 
-    const bounds = new mapboxgl.LngLatBounds();
+    const bounds = new maplibregl.LngLatBounds();
     let sumaLng = 0;
     let sumaLat = 0;
 
@@ -637,43 +643,55 @@ function normalizarNombreEstado(valor) {
     return estadoCanonico?.nombre || estado;
 }
 
-const map = new mapboxgl.Map({
+const map = new maplibregl.Map({
     container: 'map',
-    style: 'mapbox://styles/miguelochoa/cmq5ozdrp001w01qrgm54dge6',
+    style: `https://api.maptiler.com/maps/01a0b1f2-0934-7493-a5c7-152340385019/style.json?key=${encodeURIComponent(MAPTILER_API_KEY)}`,
     center: [-100.910019, 25.946378],
     zoom: window.innerWidth < 768 ? 4.2 : 4.5,
     customAttribution: '© DGVC 2026'
 });
 
-map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+map.addControl(new maplibregl.NavigationControl(), 'top-right');
 map.addControl(
-    new mapboxgl.GeolocateControl({
+    new maplibregl.GeolocateControl({
         positionOptions: { enableHighAccuracy: true },
         trackUserLocation: true,
         showUserHeading: true
     }),
     'top-right'
 );
-if (typeof mapboxgl.FullscreenControl === 'function') {
-    map.addControl(new mapboxgl.FullscreenControl(), 'top-right');
+if (typeof maplibregl.FullscreenControl === 'function') {
+    map.addControl(new maplibregl.FullscreenControl(), 'top-right');
 }
 
 // --- BUSCADOR: Botón lupa + flyout ---
-const geocoder = new MapboxGeocoder({
-    accessToken: mapboxgl.accessToken,
-    mapboxgl: mapboxgl,
-    marker: false,
-    placeholder: 'Buscar un lugar'
-});
+const geocoder = typeof maptilerGeocoder !== 'undefined'
+    && typeof maptilerGeocoder.GeocodingControl === 'function'
+    ? new maptilerGeocoder.GeocodingControl({
+        apiKey: MAPTILER_API_KEY,
+        marker: false,
+        showResultMarkers: false,
+        fullGeometryStyle: false,
+        placeholder: 'Buscar un lugar',
+        language: 'es',
+        country: 'mx',
+        proximity: [{ type: 'map-center' }],
+        clearButtonTitle: 'Limpiar búsqueda',
+        errorMessage: 'No fue posible realizar la búsqueda.',
+        noResultsMessage: 'No encontramos resultados. Revisa el nombre o intenta otra búsqueda.',
+        clearListOnPick: true,
+        limit: 5
+    })
+    : null;
 
 // Custom control: magnifying glass button
 class SearchControl {
     onAdd(map) {
         this._map = map;
 
-        // Button (sin wrapper mapboxgl-ctrl-group para evitar doble caja)
+        // Button (sin wrapper maplibregl-ctrl-group para evitar doble caja)
         this._btn = document.createElement('button');
-        this._btn.className = 'search-toggle-btn mapboxgl-ctrl';
+        this._btn.className = 'search-toggle-btn maplibregl-ctrl';
         this._btn.type = 'button';
         this._btn.title = 'Buscar';
         this._btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`;
@@ -689,10 +707,7 @@ class SearchControl {
             e.stopPropagation();
             const isActive = this._flyout.classList.toggle('active');
             if (isActive) {
-                setTimeout(() => {
-                    const input = this._flyout.querySelector('.mapboxgl-ctrl-geocoder--input');
-                    if (input) input.focus();
-                }, 100);
+                setTimeout(() => geocoder.focus(), 100);
             }
         });
 
@@ -709,7 +724,7 @@ class SearchControl {
         });
 
         // Close after result selected
-        geocoder.on('result', () => {
+        geocoder.on('pick', () => {
             setTimeout(() => this._flyout.classList.remove('active'), 600);
         });
 
@@ -718,9 +733,12 @@ class SearchControl {
     onRemove() {
         this._btn.parentNode.removeChild(this._btn);
         if (this._flyout) this._flyout.remove();
+        geocoder.onRemove();
     }
 }
-map.addControl(new SearchControl(), 'top-right');
+if (geocoder) {
+    map.addControl(new SearchControl(), 'top-right');
+}
 
 // --- CONFIGURACIÓN DE RUTAS (Modo Regla) ---
 // --- CONFIGURACIÓN DE RUTAS (Modo Regla - API Manual) ---
@@ -729,8 +747,12 @@ let perfilActual = 'mapbox/driving';
 
 // Función para obtener ruta desde la API de Mapbox
 async function getRoute(start, end, profile) {
+    if (!MAPBOX_ACCESS_TOKEN) {
+        throw new Error('Las rutas requieren MAPBOX_ACCESS_TOKEN durante esta etapa de la migración.');
+    }
+
     const query = await fetch(
-        `https://api.mapbox.com/directions/v5/${profile}/${start[0]},${start[1]};${end[0]},${end[1]}?steps=true&geometries=geojson&language=es&access_token=${mapboxgl.accessToken}`,
+        `https://api.mapbox.com/directions/v5/${profile}/${start[0]},${start[1]};${end[0]},${end[1]}?steps=true&geometries=geojson&language=es&access_token=${MAPBOX_ACCESS_TOKEN}`,
         { method: 'GET' }
     );
     const json = await query.json();
@@ -921,14 +943,14 @@ function mostrarPopupRuta(data, profile) {
         });
 
         // Cerrar otros popups abiertos
-        const popupsAbiertos = document.getElementsByClassName('mapboxgl-popup');
+        const popupsAbiertos = document.getElementsByClassName('maplibregl-popup');
         while (popupsAbiertos.length > 0) {
             popupsAbiertos[0].remove();
         }
 
         if (popupMedicion) popupMedicion.remove();
 
-        popupMedicion = new mapboxgl.Popup({
+        popupMedicion = new maplibregl.Popup({
             className: 'medida-popup',
             closeButton: true,
             closeOnClick: false,
@@ -957,9 +979,9 @@ class RulerControl {
     onAdd(map) {
         this._map = map;
         this._container = document.createElement('div');
-        this._container.className = 'mapboxgl-ctrl mapboxgl-ctrl-group';
+        this._container.className = 'maplibregl-ctrl maplibregl-ctrl-group';
         this._container.innerHTML = `
-            <button id="btn-medir" class="mapboxgl-ctrl-icon" type="button" aria-label="Medir distancia" title="Medir distancia" style="font-size: 18px; display: flex; align-items: center; justify-content: center;">
+            <button id="btn-medir" class="maplibregl-ctrl-icon" type="button" aria-label="Medir distancia" title="Medir distancia" style="font-size: 18px; display: flex; align-items: center; justify-content: center;">
                 📏
             </button>
         `;
@@ -1039,11 +1061,13 @@ class RulerControl {
 }
 
 // Agregar el control al mapa
-const rulerControl = new RulerControl();
-map.addControl(rulerControl, 'top-right');
+const rulerControl = MAPBOX_ACCESS_TOKEN ? new RulerControl() : null;
+if (rulerControl) {
+    map.addControl(rulerControl, 'top-right');
+}
 
 function desactivarModoMedicion() {
-    rulerControl.desactivar();
+    if (rulerControl) rulerControl.desactivar();
 }
 
 map.on('click', (e) => {
@@ -1168,14 +1192,14 @@ function manejarRuta(e) {
             });
 
             // Cerrar otros popups abiertos
-            const popupsAbiertos = document.getElementsByClassName('mapboxgl-popup');
+            const popupsAbiertos = document.getElementsByClassName('maplibregl-popup');
             while (popupsAbiertos.length > 0) {
                 popupsAbiertos[0].remove();
             }
 
             if (popupMedicion) popupMedicion.remove();
 
-            popupMedicion = new mapboxgl.Popup({
+            popupMedicion = new maplibregl.Popup({
                 className: 'medida-popup',
                 closeButton: true,
                 closeOnClick: false,
@@ -1930,22 +1954,22 @@ map.on('load', () => {
         paint: { 'fill-color': '#ccc', 'fill-opacity': 0.5 }
     });
 
-    popupDelitosHover = new mapboxgl.Popup({
+    popupDelitosHover = new maplibregl.Popup({
         closeButton: false,
         closeOnClick: false,
         className: 'delitos-hover-popup'
     });
-    popupEspaciosHover = new mapboxgl.Popup({
+    popupEspaciosHover = new maplibregl.Popup({
         closeButton: false,
         closeOnClick: false,
         className: 'delitos-hover-popup'
     });
-    popupTerritoriosPazHover = new mapboxgl.Popup({
+    popupTerritoriosPazHover = new maplibregl.Popup({
         closeButton: false,
         closeOnClick: false,
         className: 'delitos-hover-popup'
     });
-    popupPlanMichoacanHover = new mapboxgl.Popup({
+    popupPlanMichoacanHover = new maplibregl.Popup({
         closeButton: false,
         closeOnClick: false,
         className: 'delitos-hover-popup'
@@ -2175,7 +2199,7 @@ map.on('load', () => {
             </div>
         `;
 
-        new mapboxgl.Popup({ maxWidth: '300px' })
+        new maplibregl.Popup({ maxWidth: '300px' })
             .setLngLat(e.lngLat)
             .setHTML(htmlContent)
             .addTo(map);
@@ -2217,7 +2241,7 @@ map.on('load', () => {
             </div>
         `;
 
-        new mapboxgl.Popup({ maxWidth: '300px' })
+        new maplibregl.Popup({ maxWidth: '300px' })
             .setLngLat(e.lngLat)
             .setHTML(contenido)
             .addTo(map);
@@ -2305,7 +2329,7 @@ map.on('load', () => {
             </div>
         `;
 
-        new mapboxgl.Popup({ maxWidth: '320px' })
+        new maplibregl.Popup({ maxWidth: '320px' })
             .setLngLat(e.lngLat)
             .setHTML(contenido)
             .addTo(map);
@@ -2925,7 +2949,7 @@ window.manejarCambioMunicipio = function (municipio) {
         });
 
     if (puntosMunicipio.length > 0) {
-        const bounds = new mapboxgl.LngLatBounds();
+        const bounds = new maplibregl.LngLatBounds();
         let sumaLng = 0;
         let sumaLat = 0;
         puntosMunicipio.forEach(f => {

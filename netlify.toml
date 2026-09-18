@@ -1,3 +1,3 @@
 [build]
-  command = "test -n \"$MAPBOX_ACCESS_TOKEN\" && printf \"window.MAPBOX_ACCESS_TOKEN = '%s';\\n\" \"$MAPBOX_ACCESS_TOKEN\" > config.js"
+  command = "test -n \"$MAPTILER_API_KEY\" && printf \"window.MAPTILER_API_KEY = '%s';\\nwindow.MAPBOX_ACCESS_TOKEN = '%s';\\n\" \"$MAPTILER_API_KEY\" \"$MAPBOX_ACCESS_TOKEN\" > config.js"
   publish = "."
