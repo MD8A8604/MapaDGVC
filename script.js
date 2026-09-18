@@ -58,12 +58,15 @@ const PROP_ACCIONES = 'Acciones';
 const PROP_CEDULAS_APLICADAS = 'Cédulas aplicadas';
 const ICONO_PROGRAMA_DEFAULT = 'programa-default';
 const PROGRAMA_SEMILLEROS_CREATIVOS_PAZ = 'Semilleros creativos de paz';
+const PROGRAMA_SEMILLEROS_FOMENTO_MUSICAL = 'Semilleros Creativos Fomento Musical';
 const PROGRAMA_PROMOTORIAS_CV = 'Promotorías Cívico Culturales (CV)';
 
 const ALIASES_PROGRAMAS = new Map([
     ['semilleros creativos', PROGRAMA_SEMILLEROS_CREATIVOS_PAZ],
     ['semilleros creativos dgvc', PROGRAMA_SEMILLEROS_CREATIVOS_PAZ],
     ['semilleros creativos de paz', PROGRAMA_SEMILLEROS_CREATIVOS_PAZ],
+    ['semilleros de musica', PROGRAMA_SEMILLEROS_FOMENTO_MUSICAL],
+    ['semilleros creativos fomento musical', PROGRAMA_SEMILLEROS_FOMENTO_MUSICAL],
     ['convite cultural', PROGRAMA_PROMOTORIAS_CV],
     ['convites culturales', PROGRAMA_PROMOTORIAS_CV],
     ['promotorias civico culturales (cv)', PROGRAMA_PROMOTORIAS_CV],
@@ -73,7 +76,7 @@ const ALIASES_PROGRAMAS = new Map([
 const programasOriginales = [
     { nombre: PROGRAMA_SEMILLEROS_CREATIVOS_PAZ, etiquetaLeyenda: 'Creativos de paz', color: '#7A5AA6', categoria: 'Actividades de formación', forma: 'circle', icono: 'programa-semilleros-creativos', cantidad: 0 },
     { nombre: 'Semilleros de Paz', etiquetaLeyenda: 'Paz', color: '#A66A5B', categoria: 'Actividades de formación', forma: 'circle', icono: 'programa-semilleros-paz', cantidad: 0 },
-    { nombre: 'Semilleros de Música', etiquetaLeyenda: 'Música', color: '#3B6C8F', categoria: 'Actividades de formación', forma: 'circle', icono: 'programa-semilleros-musica', cantidad: 0 },
+    { nombre: PROGRAMA_SEMILLEROS_FOMENTO_MUSICAL, etiquetaLeyenda: 'Fomento Musical', color: '#3B6C8F', categoria: 'Actividades de formación', forma: 'circle', icono: 'programa-semilleros-fomento-musical', cantidad: 0 },
     { nombre: 'Semilleros Creativos INPI', etiquetaLeyenda: 'INPI', color: '#A57F2C', categoria: 'Actividades de formación', forma: 'circle', icono: 'programa-semilleros-inpi', cantidad: 0 },
     { nombre: PROGRAMA_PROMOTORIAS_CV, color: '#9B2247', categoria: 'Actividades artísticas y culturales', forma: 'diamond', icono: 'programa-convites', cantidad: 0 },
     { nombre: 'Cine Sillita', color: '#B08D57', categoria: 'Actividades artísticas y culturales', forma: 'diamond', icono: 'programa-cine', cantidad: 0 },
@@ -88,7 +91,7 @@ const GRUPO_SEMILLEROS = {
     color: '#7A5AA6',
     forma: 'circle',
     categoria: 'Actividades de formación',
-    programas: [PROGRAMA_SEMILLEROS_CREATIVOS_PAZ, 'Semilleros de Música', 'Semilleros de Paz', 'Semilleros Creativos INPI']
+    programas: [PROGRAMA_SEMILLEROS_CREATIVOS_PAZ, PROGRAMA_SEMILLEROS_FOMENTO_MUSICAL, 'Semilleros de Paz', 'Semilleros Creativos INPI']
 };
 
 let gruposLeyendaExpandidos = {
