@@ -57,6 +57,7 @@ let modoNinecesActual = '3_11';
 const PROP_ACCIONES = 'Acciones';
 const PROP_CEDULAS_APLICADAS = 'Cédulas aplicadas';
 const PROP_MUNICIPIO_PRIORITARIO = 'Municipio_prioritario';
+const PROP_CLAVE_MUNICIPIO_TERRITORIO = '_claveMunicipioTerritorio';
 const MODO_TERRITORIOS_PRIORITARIOS = 'prioritarios';
 const MODO_TERRITORIOS_TODOS = 'todos';
 const ICONO_PROGRAMA_DEFAULT = 'programa-default';
@@ -205,6 +206,18 @@ function normalizarTexto(valor) {
     return texto;
 }
 
+function normalizarClaveGeografica(valor) {
+    return normalizarTexto(valor)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, ' ')
+        .toLowerCase();
+}
+
+function crearClaveMunicipioTerritorio(estado, municipio) {
+    return `${normalizarClaveGeografica(estado)}||${normalizarClaveGeografica(municipio)}`;
+}
+
 function normalizarPrograma(valor) {
     const programa = normalizarTexto(valor);
     const clave = programa
@@ -291,7 +304,10 @@ let datosEspaciosPuntos = null;
 let datosDelitosLimpios = null;
 let datosNinecesLimpios = null;
 let datosPlanMichoacan = null;
+let datosTerritoriosPaz = null;
 let datosEstadosMexico = null;
+let clavesMunicipiosTerritoriosPaz = new Set();
+let clavesMunicipiosPrioritarios = new Set();
 let mapaListo = false;
 let popupDelitosHover = null;
 let popupEspaciosHover = null;
@@ -469,7 +485,7 @@ function obtenerResumenPuntosParaZoom(estado = filtroEstadoActual, municipio = '
         if (estado !== 'Todos los estados' && props.Estado !== estado) return false;
         if (municipio !== 'Todos los municipios' && props.Municipio !== municipio) return false;
         if (filtrosProgramasActivos.length > 0 && !filtrosProgramasActivos.includes(props.Programa)) return false;
-        if (territoriosPazVisible && props['Atención a las causas'] !== 'Sí') return false;
+        if (territoriosPazVisible && !puntoCumpleFiltroTerritoriosPaz(props)) return false;
         if (planMichoacanVisible && !ESTADOS_PLAN_MICHOACAN.includes(props.Estado)) return false;
         if (!planMichoacanVisible && planesVisible && !ESTADOS_ISTMO_CUENCA.includes(props.Estado)) return false;
         return true;
@@ -1269,18 +1285,25 @@ async function fetchCSVAsGeoJSON(url, { dynamicTyping = true } = {}) {
                 complete: function (results) {
                     const features = results.data
                         .filter(row => row.Latitud && row.Longitud && !isNaN(row.Latitud) && !isNaN(row.Longitud))
-                        .map(row => ({
-                            type: 'Feature',
-                            geometry: {
-                                type: 'Point',
-                                coordinates: [parseFloat(row.Longitud), parseFloat(row.Latitud)]
-                            },
-                            properties: {
-                                ...row,
-                                Programa: normalizarPrograma(row.Programa),
-                                Estado: normalizarNombreEstado(row.Estado)
-                            }
-                        }));
+                        .map(row => {
+                            const estado = normalizarNombreEstado(row.Estado);
+                            const municipio = normalizarTexto(row.Municipio);
+
+                            return {
+                                type: 'Feature',
+                                geometry: {
+                                    type: 'Point',
+                                    coordinates: [parseFloat(row.Longitud), parseFloat(row.Latitud)]
+                                },
+                                properties: {
+                                    ...row,
+                                    Programa: normalizarPrograma(row.Programa),
+                                    Estado: estado,
+                                    Municipio: municipio,
+                                    [PROP_CLAVE_MUNICIPIO_TERRITORIO]: crearClaveMunicipioTerritorio(estado, municipio)
+                                }
+                            };
+                        });
 
                     resolve({
                         type: 'FeatureCollection',
@@ -2127,7 +2150,7 @@ map.on('load', () => {
 
     map.addSource('fuente-territorios-paz', {
         type: 'geojson',
-        data: TERRITORIOS_PAZ_URL
+        data: { type: 'FeatureCollection', features: [] }
     });
     map.addLayer({
         id: ID_CAPA_TERRITORIOS_PAZ,
@@ -2153,6 +2176,17 @@ map.on('load', () => {
         },
         filter: obtenerFiltroTerritoriosPaz()
     }, 'puntos-geojson');
+
+    fetchGeoJSON(TERRITORIOS_PAZ_URL, 'Territorios de Paz')
+        .then(data => {
+            datosTerritoriosPaz = data;
+            indexarMunicipiosTerritoriosPaz(data);
+            map.getSource('fuente-territorios-paz').setData(data);
+            aplicarFiltroTerritoriosPaz();
+            aplicarFiltros();
+            console.log(`✓ Territorios de Paz cargados: ${data.features.length} municipios`);
+        })
+        .catch(error => console.error('Error cargando Territorios de Paz:', error));
 
     // --- INTERACCIÓN: CLIC EN PUNTOS (TOOLTIP / POPUP) ---
     map.on('click', 'puntos-geojson', (e) => {
@@ -3047,6 +3081,11 @@ function aplicarFiltros() {
 
     if (territoriosPazVisible) {
         f.push(['==', ['get', 'Atención a las causas'], 'Sí']);
+        f.push([
+            'in',
+            ['get', PROP_CLAVE_MUNICIPIO_TERRITORIO],
+            ['literal', [...obtenerClavesMunicipiosTerritoriosActivos()]]
+        ]);
     }
 
     // Filtro geográfico por capa activa
@@ -3121,7 +3160,7 @@ function actualizarContadores() {
         d = d.filter(f => filtrosProgramasActivos.includes(f.properties.Programa));
     }
     if (territoriosPazVisible) {
-        d = d.filter(f => f.properties['Atención a las causas'] === 'Sí');
+        d = d.filter(f => puntoCumpleFiltroTerritoriosPaz(f.properties));
     }
     // Filtro geográfico por capa activa
     if (planMichoacanVisible) {
@@ -3191,6 +3230,38 @@ window.manejarSwitchPromotorias = function (v) {
     if (v) cargarPromotorias();
 }
 
+function indexarMunicipiosTerritoriosPaz(data) {
+    const todos = new Set();
+    const prioritarios = new Set();
+
+    data.features.forEach(feature => {
+        const propiedades = feature?.properties || {};
+        const estado = propiedades.Entidad || propiedades.NOM_ENT || '';
+        const municipio = propiedades.NOMGEO || obtenerNombreMunicipio(propiedades);
+        const clave = crearClaveMunicipioTerritorio(estado, municipio);
+        if (!normalizarClaveGeografica(estado) || !normalizarClaveGeografica(municipio)) return;
+
+        todos.add(clave);
+        if (normalizarClaveGeografica(propiedades[PROP_MUNICIPIO_PRIORITARIO]) === 'si') {
+            prioritarios.add(clave);
+        }
+    });
+
+    clavesMunicipiosTerritoriosPaz = todos;
+    clavesMunicipiosPrioritarios = prioritarios;
+}
+
+function obtenerClavesMunicipiosTerritoriosActivos() {
+    return modoTerritoriosPazActual === MODO_TERRITORIOS_PRIORITARIOS
+        ? clavesMunicipiosPrioritarios
+        : clavesMunicipiosTerritoriosPaz;
+}
+
+function puntoCumpleFiltroTerritoriosPaz(propiedades = {}) {
+    if (propiedades['Atención a las causas'] !== 'Sí') return false;
+    return obtenerClavesMunicipiosTerritoriosActivos().has(propiedades[PROP_CLAVE_MUNICIPIO_TERRITORIO]);
+}
+
 function obtenerFiltroTerritoriosPaz() {
     const filtro = [
         'all',
@@ -3225,6 +3296,7 @@ window.manejarModoTerritoriosPaz = function (modo) {
     if (![MODO_TERRITORIOS_PRIORITARIOS, MODO_TERRITORIOS_TODOS].includes(modo)) return;
     modoTerritoriosPazActual = modo;
     aplicarFiltroTerritoriosPaz();
+    aplicarFiltros();
 }
 
 window.manejarSwitchTerritoriosPaz = function (v) {
