@@ -365,6 +365,27 @@ body {
     margin-top: 5px;
 }
 
+.territorios-paz-mode-container {
+    margin-top: 2px;
+}
+
+.territorios-paz-mode-title {
+    margin-bottom: 5px;
+    color: #666;
+}
+
+.territorios-paz-mode-segmented {
+    margin-bottom: 0;
+}
+
+.territorios-paz-mode-segmented .estatus-btn {
+    min-height: 32px;
+    padding: 5px 7px;
+    font-size: 10.5px;
+    line-height: 1.15;
+    white-space: normal;
+}
+
 .promotorias-ageb-key {
     width: 13px;
     height: 13px;

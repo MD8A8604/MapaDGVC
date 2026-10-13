@@ -21,7 +21,7 @@ const DELITOS_URL = 'https://raw.githubusercontent.com/MD8A8604/Incidencia-delic
 const NINECES_URL = 'https://raw.githubusercontent.com/MD8A8604/NNYJ/main/Concentraci%C3%B3n_ni%C3%B1eces.geojson';
 const PLAN_MICHOACAN_URL = 'https://raw.githubusercontent.com/MD8A8604/Michoacan/refs/heads/main/PlanMichoacan.geojson';
 const PLANES_URL = 'https://raw.githubusercontent.com/MD8A8604/Cuenca_Istmo/main/Istmo_cuenca.geojson';
-const TERRITORIOS_PAZ_URL = 'https://raw.githubusercontent.com/MD8A8604/TP/main/Territorios%20de%20paz.geojson';
+const TERRITORIOS_PAZ_URL = 'https://raw.githubusercontent.com/MD8A8604/TP/main/Territorios%20de%20paz.geojson?v=20261013-73';
 const PROMOTORIAS_AGEBS_URL = 'https://raw.githubusercontent.com/MD8A8604/agebs_tp/refs/heads/main/TP_AGEBS.json';
 const PROMOTORIAS_ENCUESTAS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTmvtknwAW3b2TB_6edYnmVjR70T5lOFOAqLsVmbcqdSksUS0zNRuJc2gh9EIoVGDnxC2wC4UOuiSgk/pub?gid=803912037&single=true&output=csv';
 const GEOJSON_FETCH_TIMEOUT_MS = 120000;
@@ -56,6 +56,9 @@ const PROP_NINECES_18_29 = '18_A_29';
 let modoNinecesActual = '3_11';
 const PROP_ACCIONES = 'Acciones';
 const PROP_CEDULAS_APLICADAS = 'Cédulas aplicadas';
+const PROP_MUNICIPIO_PRIORITARIO = 'Municipio_prioritario';
+const MODO_TERRITORIOS_PRIORITARIOS = 'prioritarios';
+const MODO_TERRITORIOS_TODOS = 'todos';
 const ICONO_PROGRAMA_DEFAULT = 'programa-default';
 const PROGRAMA_SEMILLEROS_CREATIVOS_PAZ = 'Semilleros creativos de paz';
 const PROGRAMA_SEMILLEROS_FOMENTO_MUSICAL = 'Semilleros Creativos Fomento Musical';
@@ -268,6 +271,7 @@ let filtroMunicipioActual = 'Todos los municipios';
 let filtrosProgramasActivos = [];
 let filtroEstatus = 'Activo';
 let territoriosPazVisible = false;
+let modoTerritoriosPazActual = MODO_TERRITORIOS_PRIORITARIOS;
 let promotoriasVisible = false;
 let densidadVisible = false;
 let indigenaVisible = false;
@@ -2135,11 +2139,7 @@ map.on('load', () => {
             'fill-opacity': 0.35,
             'fill-outline-color': '#9AD9A6'
         },
-        filter: [
-            'all',
-            ['!=', ['get', 'TP'], null],
-            ['!=', ['get', 'TP'], '']
-        ]
+        filter: obtenerFiltroTerritoriosPaz()
     }, 'puntos-geojson');
     map.addLayer({
         id: ID_CAPA_TERRITORIOS_PAZ_BORDE,
@@ -2151,11 +2151,7 @@ map.on('load', () => {
             'line-width': 1.2,
             'line-opacity': 0.9
         },
-        filter: [
-            'all',
-            ['!=', ['get', 'TP'], null],
-            ['!=', ['get', 'TP'], '']
-        ]
+        filter: obtenerFiltroTerritoriosPaz()
     }, 'puntos-geojson');
 
     // --- INTERACCIÓN: CLIC EN PUNTOS (TOOLTIP / POPUP) ---
@@ -3195,6 +3191,42 @@ window.manejarSwitchPromotorias = function (v) {
     if (v) cargarPromotorias();
 }
 
+function obtenerFiltroTerritoriosPaz() {
+    const filtro = [
+        'all',
+        ['!=', ['get', 'TP'], null],
+        ['!=', ['get', 'TP'], '']
+    ];
+
+    if (modoTerritoriosPazActual === MODO_TERRITORIOS_PRIORITARIOS) {
+        filtro.push(['==', ['get', PROP_MUNICIPIO_PRIORITARIO], 'Sí']);
+    }
+
+    return filtro;
+}
+
+function actualizarBotonesModoTerritoriosPaz() {
+    document.querySelectorAll('[data-territorios-paz-mode]').forEach(boton => {
+        const activo = boton.dataset.territoriosPazMode === modoTerritoriosPazActual;
+        boton.classList.toggle('active', activo);
+        boton.setAttribute('aria-pressed', String(activo));
+    });
+}
+
+function aplicarFiltroTerritoriosPaz() {
+    const filtro = obtenerFiltroTerritoriosPaz();
+    [ID_CAPA_TERRITORIOS_PAZ, ID_CAPA_TERRITORIOS_PAZ_BORDE].forEach(idCapa => {
+        if (map.getLayer(idCapa)) map.setFilter(idCapa, filtro);
+    });
+    actualizarBotonesModoTerritoriosPaz();
+}
+
+window.manejarModoTerritoriosPaz = function (modo) {
+    if (![MODO_TERRITORIOS_PRIORITARIOS, MODO_TERRITORIOS_TODOS].includes(modo)) return;
+    modoTerritoriosPazActual = modo;
+    aplicarFiltroTerritoriosPaz();
+}
+
 window.manejarSwitchTerritoriosPaz = function (v) {
     territoriosPazVisible = v;
     if (map.getLayer(ID_CAPA_TERRITORIOS_PAZ)) {
@@ -3207,6 +3239,7 @@ window.manejarSwitchTerritoriosPaz = function (v) {
     const divLeyenda = document.getElementById('territorios-paz-legend');
     if (divLeyenda) divLeyenda.style.display = v ? 'block' : 'none';
 
+    aplicarFiltroTerritoriosPaz();
     toggleChecks('territorios-paz', v);
     aplicarFiltros();
     if (!v && !planMichoacanVisible && !planesVisible) {
@@ -3382,6 +3415,7 @@ window.resetearFiltros = function () {
     gruposLeyendaExpandidos[GRUPO_SEMILLEROS.id] = false;
     actualizarVisibilidadGrupoLeyenda(GRUPO_SEMILLEROS.id);
     territoriosPazVisible = false;
+    modoTerritoriosPazActual = MODO_TERRITORIOS_PRIORITARIOS;
     promotoriasVisible = false;
     filtroEstatus = 'Activo';
     filtroEstadoActual = 'Todos los estados';
@@ -3400,6 +3434,7 @@ window.resetearFiltros = function () {
     });
     actualizarBotonesModoEspacios();
     actualizarBotonesModoDelitos();
+    actualizarBotonesModoTerritoriosPaz();
     manejarSwitchPromotorias(false);
     manejarSwitchTerritoriosPaz(false);
     manejarSwitchDensidad(false);
@@ -3587,16 +3622,17 @@ function crearLeyenda() {
     
     const pazLegend = document.createElement('div');
     pazLegend.id = 'territorios-paz-legend';
-    pazLegend.className = 'switch-container';
+    pazLegend.className = 'strategy-layer-legend territorios-paz-mode-container';
     pazLegend.style.display = 'none';
     pazLegend.innerHTML = `
-        <div style="font-size:11px; margin-left:24px; margin-top:-8px; padding-bottom:8px; display:flex; flex-direction:column; gap:6px;">
-            <div style="display:flex; align-items:center; gap:6px;"><div style="width:12px; height:12px; background:#C92A3A; opacity:0.8;"></div><span style="color:#555">Prioridad Alta</span></div>
-            <div style="display:flex; align-items:center; gap:6px;"><div style="width:12px; height:12px; background:#F4CE4A; opacity:0.8;"></div><span style="color:#555">Prioridad Media</span></div>
-            <div style="display:flex; align-items:center; gap:6px;"><div style="width:12px; height:12px; background:#22586A; opacity:0.8;"></div><span style="color:#555">Prioridad Baja</span></div>
+        <div class="territorios-paz-mode-title">Mostrar municipios</div>
+        <div class="estatus-segmented territorios-paz-mode-segmented" role="group" aria-label="Municipios de Territorios de Paz">
+            <button type="button" class="estatus-btn active" data-territorios-paz-mode="prioritarios" aria-pressed="true" onclick="manejarModoTerritoriosPaz('prioritarios')">Prioritarios (47)</button>
+            <button type="button" class="estatus-btn" data-territorios-paz-mode="todos" aria-pressed="false" onclick="manejarModoTerritoriosPaz('todos')">Todos (73)</button>
         </div>
     `;
     body.appendChild(pazLegend);
+    actualizarBotonesModoTerritoriosPaz();
 
     addSw('promotorias-switch', 'Promotorías cívico culturales', 'manejarSwitchPromotorias(this.checked)', 'promotorias');
 
